@@ -15,6 +15,7 @@ import {
   TOUR_CANCELED_TENANT_SUBJECT,
   TOUR_CONFIRMED_TENANT_SUBJECT,
   TOUR_REQUEST_MANAGER_SUBJECT,
+  TOUR_REQUEST_REMOVED_TENANT_SUBJECT,
   TOUR_REQUEST_TENANT_SUBJECT,
   TOUR_RESCHEDULED_TENANT_SUBJECT,
   buildTourCanceledTenantBody,
@@ -22,6 +23,7 @@ import {
   buildTourConfirmedTenantHtml,
   buildTourNotificationContext,
   buildTourRequestManagerBody,
+  buildTourRequestRemovedTenantBody,
   buildTourRescheduledTenantBody,
   formatTourTimeRange,
   buildTourRequestTenantBody,
@@ -422,6 +424,69 @@ export async function notifyTenantTourRequestReceived(
   });
 
   if (email.error) return { ok: true, skipped: true, error: email.error };
+  return { ok: true, skipped: email.skipped };
+}
+
+/** Tell the guest a pending tour request was removed before it was confirmed. */
+export async function notifyTenantTourRequestRemoved(
+  db: Db,
+  req: Request,
+  inquiry: TourInquiryPayload,
+  window?: { start: string; end: string },
+): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
+  const row = inquiry as Record<string, unknown>;
+  const guestEmail = textField(row, "email");
+  if (!guestEmail || !guestEmail.includes("@")) {
+    return { ok: false, error: "Guest email is required to notify the guest." };
+  }
+
+  const tourStartIso = window?.start || textField(row, "proposedStart");
+  const tourEndIso = window?.end || textField(row, "proposedEnd");
+  const propertyId = textField(row, "propertyId");
+  const propertyAddress = await resolvePropertyAddressForTour(db, propertyId);
+  const origin = resolveEmailLinkBaseUrl();
+  const ctx = buildTourNotificationContext({
+    origin,
+    guestName: textField(row, "name") || "Guest",
+    guestEmail,
+    guestPhone: textField(row, "phone") || null,
+    propertyId,
+    propertyTitle: textField(row, "propertyTitle") || "Property",
+    propertyAddress,
+    roomLabel: textField(row, "roomLabel") || null,
+    tourStartIso,
+    tourEndIso,
+    notes: textField(row, "notes") || null,
+    managerLabel: textField(row, "adminLabel") || null,
+    tourInquiryId: textField(row, "id") || null,
+  });
+
+  const subject = TOUR_REQUEST_REMOVED_TENANT_SUBJECT;
+  const text = buildTourRequestRemovedTenantBody(ctx);
+  const managerUserId = textField(row, "managerUserId");
+
+  await recordResidentProspectInboxMessage(db, {
+    participantEmail: guestEmail,
+    subject,
+    body: text,
+    fromName: "PropLane Tours",
+    managerUserId: managerUserId || undefined,
+    propertyId: propertyId || undefined,
+    propertyTitle: ctx.propertyTitle,
+  });
+
+  const email = await deliverEmail([guestEmail], subject, text);
+
+  const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
+  await textTourGuest({
+    guestPhone: textField(row, "phone") || null,
+    smsConsent: inquirySmsConsent(inquiry),
+    text: `PropLane: your tour request for ${ctx.propertyTitle}${
+      tourStartIso && tourEndIso ? ` (${formatTourTimeRange(tourStartIso, tourEndIso)})` : ""
+    } was removed by the property team. Request another time: ${listingLink}. Reply STOP to opt out, HELP for help.`,
+  });
+
+  if (email.error) return { ok: false, skipped: false, error: email.error };
   return { ok: true, skipped: email.skipped };
 }
 

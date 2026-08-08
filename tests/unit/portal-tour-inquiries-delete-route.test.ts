@@ -6,6 +6,9 @@ let INQUIRY_PAYLOAD: Record<string, unknown>[];
 let UPSERT_CALLS: unknown[];
 
 vi.mock("@/lib/auth/admin-preview", () => ({ isAdminUser: async () => false }));
+vi.mock("@/lib/tour-notification-delivery.server", () => ({
+  notifyTenantTourRequestRemoved: vi.fn().mockResolvedValue({ ok: true, skipped: false }),
+}));
 vi.mock("@/lib/supabase/server", () => ({
   createSupabaseServerClient: async () => ({ auth: { getUser } }),
 }));
@@ -14,6 +17,7 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 
 import { POST as deleteTourInquiry } from "@/app/api/portal-tour-inquiries/delete/route";
+import { notifyTenantTourRequestRemoved } from "@/lib/tour-notification-delivery.server";
 
 function makeServiceClient() {
   return {
@@ -90,6 +94,7 @@ describe("POST /api/portal-tour-inquiries/delete", () => {
       }),
     );
     expect(res.status).toBe(200);
+    expect(notifyTenantTourRequestRemoved).toHaveBeenCalled();
     expect(UPSERT_CALLS).toHaveLength(1);
     const upserted = UPSERT_CALLS[0] as { row_data?: { payload?: Record<string, unknown>[] } };
     const remaining = upserted.row_data?.payload ?? [];

@@ -13,6 +13,8 @@ export const TOUR_CONFIRMED_TENANT_SUBJECT = "Your PropLane tour is confirmed";
 
 export const TOUR_CANCELED_TENANT_SUBJECT = "Your PropLane tour was cancelled";
 
+export const TOUR_REQUEST_REMOVED_TENANT_SUBJECT = "Your PropLane tour request was removed";
+
 export const TOUR_RESCHEDULED_TENANT_SUBJECT = "Your PropLane tour has a new time";
 
 export type TourNotificationContext = {
@@ -182,6 +184,31 @@ export function buildTourCanceledTenantBody(
     "",
     "You are welcome to book another tour whenever it suits you:",
     ctx.applyUrl,
+    "",
+    "Questions? Reply in your PropLane inbox and your property team will help.",
+    "",
+    "— PropLane",
+  );
+  return lines.join("\n");
+}
+
+/** Pending tour request removed by the manager before it was confirmed. */
+export function buildTourRequestRemovedTenantBody(ctx: TourNotificationContext): string {
+  const greeting = ctx.guestName.trim() ? `Hi ${ctx.guestName.trim()},` : "Hi,";
+  const when = formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso);
+  const lines = [
+    greeting,
+    "",
+    "The property manager removed your tour request.",
+    "",
+    `Requested time: ${when}`,
+    `Property: ${ctx.propertyTitle || "Property"}`,
+  ];
+  if (ctx.roomLabel?.trim()) lines.push(`Room: ${ctx.roomLabel.trim()}`);
+  if (ctx.propertyAddress?.trim()) lines.push(`Address: ${ctx.propertyAddress.trim()}`);
+  lines.push(
+    "",
+    "This tour is no longer scheduled. You are welcome to request another time on the listing page.",
     "",
     "Questions? Reply in your PropLane inbox and your property team will help.",
     "",

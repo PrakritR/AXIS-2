@@ -741,7 +741,7 @@ export function PortalCalendarPanels({
       onMeetingsChanged?.();
       reloadAvailability();
       if (isPropPlaneGoogleTourMeeting(meeting)) onGoogleCalendarRefresh?.();
-      showToast(meeting.source === "inquiry" ? "Tour request removed." : "Event deleted.");
+      showToast(meeting.source === "inquiry" ? "Tour request removed and guest notified." : "Event deleted.");
     } else {
       showToast("Could not delete this event.");
     }
@@ -1162,6 +1162,11 @@ export function PortalCalendarPanels({
   const selectedIsGuestFacingTour =
     selectedBlock?.kind === "meeting" && selectedBlock.meeting.kind === "tour";
 
+  const selectedIsPendingTourInquiry =
+    selectedBlock?.kind === "meeting" &&
+    selectedBlock.meeting.kind === "tour" &&
+    selectedBlock.meeting.source === "inquiry";
+
   /** Matches the un-armed button, so arming never renames the action. */
   const selectedDeleteLabel =
     selectedBlock?.kind === "meeting" &&
@@ -1321,7 +1326,7 @@ export function PortalCalendarPanels({
           name/email/phone/property/room/notes renders taller than a 667px phone
           and the Approve/Delete row is simply unreachable. */}
       <div
-        className="modal-panel relative z-[81] max-h-[min(520px,calc(100svh-2rem))] w-full max-w-[420px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
+        className="modal-panel relative z-[81] max-h-[min(600px,calc(100svh-2rem))] w-full max-w-[540px] overflow-y-auto rounded-3xl border border-border p-4 shadow-2xl sm:p-5"
       >
       <div className="mb-4 flex items-center justify-between gap-3 border-b border-border pb-3">
         <h3 className="min-w-0 text-base font-bold text-foreground">
@@ -1553,20 +1558,28 @@ export function PortalCalendarPanels({
           {pendingTourAction === "delete" ? (
             <div className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending" data-attr="tour-delete-confirm">
               <p className="font-semibold text-foreground">
-                {selectedIsGuestFacingTour ? "Delete without telling the guest?" : "Delete this event?"}
+                {selectedIsPendingTourInquiry
+                  ? "Delete this tour request and tell the guest?"
+                  : selectedIsGuestFacingTour
+                    ? "Delete without telling the guest?"
+                    : "Delete this event?"}
               </p>
               <p className="mt-1 text-xs text-muted">
-                {selectedIsGuestFacingTour
-                  ? "This removes the event from your calendar and sends nothing."
-                  : "This removes the event from your calendar. It cannot be undone."}
-                {selectedTourGuestAlreadyTold
+                {selectedIsPendingTourInquiry
+                  ? selectedBlock.meeting.email
+                    ? `${selectedBlock.meeting.email} will receive an inbox message and email that this tour request was removed.`
+                    : "This tour request has no guest email on file, so nobody can be notified."
+                  : selectedIsGuestFacingTour
+                    ? "This removes the event from your calendar and sends nothing."
+                    : "This removes the event from your calendar. It cannot be undone."}
+                {selectedTourGuestAlreadyTold && !selectedIsPendingTourInquiry
                   ? " The guest was already told this tour is confirmed, so they will still expect it. Use Cancel tour instead unless you have already reached them."
                   : ""}
               </p>
             </div>
           ) : null}
 
-          <div className="flex flex-nowrap items-center gap-2 overflow-x-auto border-t border-border pt-4">
+          <div className="flex flex-wrap items-center gap-2 border-t border-border pt-4">
             {calendarMeetingSupportsDelete(selectedBlock.meeting) ? (
               <>
             {rescheduleOpen ? (
@@ -1610,7 +1623,11 @@ export function PortalCalendarPanels({
                     pendingTourAction === "cancel" ? cancelSelectedTour() : deleteSelectedMeeting()
                   }
                 >
-                  {pendingTourAction === "cancel" ? "Cancel tour & notify" : selectedDeleteLabel}
+                  {pendingTourAction === "cancel"
+                    ? "Cancel tour & notify"
+                    : selectedIsPendingTourInquiry
+                      ? "Delete request & notify"
+                      : selectedDeleteLabel}
                 </Button>
               </>
             ) : (
@@ -1619,7 +1636,7 @@ export function PortalCalendarPanels({
               <Button
                 type="button"
                 variant="outline"
-                className="h-9 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                className="h-9 shrink-0 whitespace-nowrap rounded-full px-4 text-xs sm:h-10 sm:px-5 sm:text-sm"
                 data-attr="tour-open-message-thread"
                 onClick={() => openGuestMessageThread(selectedBlock.meeting.email)}
               >
@@ -1651,7 +1668,7 @@ export function PortalCalendarPanels({
             <Button
               type="button"
               variant="outline"
-              className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-3 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
+              className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-4 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
               data-attr="tour-delete-open"
               onClick={() => setPendingTourAction("delete")}
             >
@@ -1662,11 +1679,10 @@ export function PortalCalendarPanels({
                 <Button
                   type="button"
                   variant="primary"
-                  className="h-9 min-w-0 shrink-0 whitespace-nowrap rounded-full px-3 text-xs sm:h-10 sm:px-5 sm:text-sm"
+                  className="h-9 min-w-0 shrink-0 whitespace-nowrap rounded-full px-4 text-xs sm:h-10 sm:px-5 sm:text-sm"
                   onClick={openTourConfirmPreview}
                 >
-                  <span className="sm:hidden">Confirm tour</span>
-                  <span className="hidden sm:inline">Review & confirm tour</span>
+                  Review & confirm tour
                 </Button>
               ) : (
                 <Button

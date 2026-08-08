@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { notifyTenantTourRequestRemoved } from "@/lib/tour-notification-delivery.server";
 
 export const runtime = "nodejs";
 
@@ -134,6 +135,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Forbidden." }, { status: 403 });
     }
 
+    let guestNotification: { ok: boolean; skipped?: boolean; error?: string } | null = null;
+    if (targetInquiry && textField(targetInquiry, "kind") === "tour") {
+      const window = windowsFromInquiry(targetInquiry)[0];
+      guestNotification = await notifyTenantTourRequestRemoved(db, req, targetInquiry, window);
+      if (!guestNotification.ok && !guestNotification.skipped) {
+        return NextResponse.json(
+          { error: guestNotification.error ?? "Could not notify the guest before deleting this tour request." },
+          { status: 500 },
+        );
+      }
+    }
+
     const nextInquiries = currentInquiries.filter((row) => {
       const rowId = textField(row, "id");
       if (idsToRemove.has(rowId)) {
@@ -170,7 +183,12 @@ export async function POST(req: Request) {
       if (deleteError) return NextResponse.json({ error: deleteError.message }, { status: 500 });
     }
 
-    return NextResponse.json({ ok: true, removedIds: [...idsToRemove], removedEventIds: eventIds });
+    return NextResponse.json({
+      ok: true,
+      removedIds: [...idsToRemove],
+      removedEventIds: eventIds,
+      guestNotification,
+    });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to delete tour inquiry.";
     return NextResponse.json({ error: message }, { status: 500 });
