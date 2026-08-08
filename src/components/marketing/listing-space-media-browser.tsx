@@ -22,7 +22,7 @@ export type ListingSpaceMediaEntry = {
 };
 
 export type ListingSpaceMediaCta =
-  | { kind: "link"; href: string; label: string; dataAttr: string }
+  | { kind: "link"; href: string; label: string; dataAttr: string; onClick?: () => void }
   | { kind: "button"; label: string; dataAttr: string; onClick: () => void };
 
 const SWIPE_THRESHOLD_PX = 48;
@@ -109,7 +109,13 @@ function SpaceMediaCtaButton({
     );
   }
   return (
-    <Link href={cta.href} className="flex-1" data-attr={cta.dataAttr} {...newTabProps}>
+    <Link
+      href={cta.href}
+      className="flex-1"
+      data-attr={cta.dataAttr}
+      onClick={cta.onClick}
+      {...newTabProps}
+    >
       <span className={className}>{cta.label}</span>
     </Link>
   );

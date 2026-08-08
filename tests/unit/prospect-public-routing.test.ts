@@ -42,7 +42,15 @@ describe("prospect-public-gate", () => {
         signedInNonResident: false,
         hasResidentRole: true,
       }),
-    ).toBe("action");
+    ).toBe("resident-portal");
+    expect(
+      resolveProspectGateView({
+        gateKey: "message:mgr-1",
+        guestContinue: false,
+        signedInNonResident: false,
+        hasResidentRole: false,
+      }),
+    ).toBe("account-prompt");
   });
 
   it("builds portal and public return paths", () => {

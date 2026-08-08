@@ -11,14 +11,15 @@ import {
   buildSmsDeepLink,
   isClawMessagingPubliclyEnabled,
 } from "@/lib/claw-leasing-links";
+import { listingApplyLabel, listingMessageLabel } from "@/lib/listing-prospect-cta-labels";
 import { useProspectListingHrefs } from "@/hooks/use-prospect-listing-hrefs";
 
 function useLeasingLabels(contactSmsPhone: string | null | undefined) {
   const textEnabled = isClawMessagingPubliclyEnabled(contactSmsPhone);
   return {
     textEnabled,
-    applyLabel: textEnabled ? "Text to apply" : "Apply online",
-    messageLabel: textEnabled ? "Text a message" : "Contact leasing",
+    applyLabel: listingApplyLabel(textEnabled),
+    messageLabel: listingMessageLabel(textEnabled),
   };
 }
 
@@ -39,7 +40,11 @@ export function ListingBathroomMediaBrowser({
 }) {
   const { textEnabled, applyLabel, messageLabel } = useLeasingLabels(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
-  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
+  const {
+    applyHref: webApplyHref,
+    messageHref: webMessageHref,
+    stageMessageCompose,
+  } = useProspectListingHrefs(listingPropertyId);
   const entries = useMemo(
     () =>
       [...bathroomMediaEntries(rows)].sort((a, b) =>
@@ -52,28 +57,6 @@ export function ListingBathroomMediaBrowser({
     const row = rows.find((r) => r.id === entries[index]?.id);
     const href = textEnabled
       ? buildSmsDeepLink({
-          intent: "question",
-          propertyId: listingPropertyId,
-          propertyLabel: label,
-          topic: row?.name ?? "this bathroom",
-          toPhone: contactSmsPhone,
-        })
-      : webMessageHref;
-    return { kind: "link", href, label: messageLabel, dataAttr: "listing-bathroom-browser-message" };
-  };
-
-  const resolveSecondaryCta = (index: number): ListingSpaceMediaCta => {
-    const row = rows.find((r) => r.id === entries[index]?.id);
-    if (onOpenDetails && row) {
-      return {
-        kind: "button",
-        label: "Full details",
-        dataAttr: "listing-bathroom-browser-details",
-        onClick: () => onOpenDetails(row),
-      };
-    }
-    const href = textEnabled
-      ? buildSmsDeepLink({
           intent: "apply",
           propertyId: listingPropertyId,
           propertyLabel: label,
@@ -81,6 +64,26 @@ export function ListingBathroomMediaBrowser({
         })
       : webApplyHref;
     return { kind: "link", href, label: applyLabel, dataAttr: "listing-bathroom-browser-apply" };
+  };
+
+  const resolveSecondaryCta = (index: number): ListingSpaceMediaCta => {
+    const row = rows.find((r) => r.id === entries[index]?.id);
+    const href = textEnabled
+      ? buildSmsDeepLink({
+          intent: "question",
+          propertyId: listingPropertyId,
+          propertyLabel: label,
+          topic: row?.name ?? "this bathroom",
+          toPhone: contactSmsPhone,
+        })
+      : webMessageHref;
+    return {
+      kind: "link",
+      href,
+      label: messageLabel,
+      dataAttr: "listing-bathroom-browser-message",
+      onClick: textEnabled ? undefined : stageMessageCompose,
+    };
   };
 
   return (
@@ -98,12 +101,8 @@ export function ListingBathroomMediaBrowser({
           : undefined
       }
       detailsActionLabel="Bathroom details"
-      resolvePrimaryCta={
-        onOpenDetails ? undefined : (_, index) => resolvePrimaryCta(index)
-      }
-      resolveSecondaryCta={
-        onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)
-      }
+      resolvePrimaryCta={(_, index) => resolvePrimaryCta(index)}
+      resolveSecondaryCta={(_, index) => resolveSecondaryCta(index)}
       className={className}
     />
   );
@@ -126,7 +125,11 @@ export function ListingSharedMediaBrowser({
 }) {
   const { textEnabled, applyLabel, messageLabel } = useLeasingLabels(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
-  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
+  const {
+    applyHref: webApplyHref,
+    messageHref: webMessageHref,
+    stageMessageCompose,
+  } = useProspectListingHrefs(listingPropertyId);
   const entries = useMemo(
     () =>
       [...sharedSpaceMediaEntries(rows)].sort((a, b) =>
@@ -147,16 +150,7 @@ export function ListingSharedMediaBrowser({
     return { kind: "link", href, label: applyLabel, dataAttr: "listing-shared-browser-apply" };
   };
 
-  const resolveSecondaryCta = (index: number): ListingSpaceMediaCta => {
-    const row = rows.find((r) => r.id === entries[index]?.id);
-    if (onOpenDetails && row) {
-      return {
-        kind: "button",
-        label: "Full details",
-        dataAttr: "listing-shared-browser-details",
-        onClick: () => onOpenDetails(row),
-      };
-    }
+  const resolveSecondaryCta = (): ListingSpaceMediaCta => {
     const href = textEnabled
       ? buildSmsDeepLink({
           intent: "question",
@@ -165,7 +159,13 @@ export function ListingSharedMediaBrowser({
           toPhone: contactSmsPhone,
         })
       : webMessageHref;
-    return { kind: "link", href, label: messageLabel, dataAttr: "listing-shared-browser-message" };
+    return {
+      kind: "link",
+      href,
+      label: messageLabel,
+      dataAttr: "listing-shared-browser-message",
+      onClick: textEnabled ? undefined : stageMessageCompose,
+    };
   };
 
   return (
@@ -183,10 +183,8 @@ export function ListingSharedMediaBrowser({
           : undefined
       }
       detailsActionLabel="Space details"
-      resolvePrimaryCta={onOpenDetails ? undefined : () => resolvePrimaryCta()}
-      resolveSecondaryCta={
-        onOpenDetails ? undefined : (_, index) => resolveSecondaryCta(index)
-      }
+      resolvePrimaryCta={() => resolvePrimaryCta()}
+      resolveSecondaryCta={() => resolveSecondaryCta()}
       className={className}
     />
   );

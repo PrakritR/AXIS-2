@@ -141,7 +141,7 @@ export function prospectSignInHref(
   });
 }
 
-export type ProspectGateView = "account-prompt" | "signed-in-create-resident" | "action";
+export type ProspectGateView = "account-prompt" | "signed-in-create-resident" | "resident-portal" | "action";
 
 export function resolveProspectGateView(input: {
   gateKey?: string;
@@ -150,8 +150,8 @@ export function resolveProspectGateView(input: {
   hasResidentRole?: boolean;
 }): ProspectGateView {
   const key = input.gateKey?.trim() ?? "";
+  if (input.hasResidentRole) return "resident-portal";
   const gateInPlay = Boolean(key) && !input.guestContinue;
   if (!gateInPlay) return "action";
-  if (input.hasResidentRole) return "action";
   return input.signedInNonResident ? "signed-in-create-resident" : "account-prompt";
 }

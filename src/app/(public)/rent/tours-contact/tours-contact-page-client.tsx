@@ -33,6 +33,7 @@ import {
 } from "@/components/marketing/tour-schedule-flow";
 import {
   ProspectGuestAccountGate,
+  ProspectResidentPortalMessagePrompt,
   ProspectSignedInResidentGate,
 } from "@/components/marketing/prospect-action-account-gate";
 import {
@@ -319,6 +320,7 @@ function MessageFlow({
     gateKey: messageGateKey,
     guestContinue: messageGuestContinue,
     signedInNonResident,
+    hasResidentRole: contactAutofill.ready && contactAutofill.hasResidentRole,
   });
 
   useEffect(() => {
@@ -384,13 +386,14 @@ function MessageFlow({
   };
 
   if (submitted && submittedContact) {
-    const createAccountHref = residentCreateAccountHref("/resident/communication", {
+    const communicationReturn = prospectPortalReturnPath("message", { propertyId });
+    const createAccountHref = residentCreateAccountHref(communicationReturn, {
       email: submittedContact.email,
       fullName: submittedContact.name,
       phone: submittedContact.phone || undefined,
       handoff: "message",
     });
-    const signInHref = residentSignInHref("/resident/communication");
+    const signInHref = residentSignInHref(communicationReturn);
 
     return (
       <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
@@ -407,18 +410,27 @@ function MessageFlow({
         {!signedInUserId ? (
           <ProspectAccountHandoff
             title="Create an account to read replies in PropLane"
-            description="See manager replies in Communication and keep the conversation in one place."
+            description="Your message was sent. Create a free resident account to read manager replies in Communication and keep the conversation in one place."
             createAccountHref={createAccountHref}
             signInHref={signInHref}
             createAccountDataAttr="message-success-create-account"
             signInDataAttr="message-success-sign-in"
           />
-        ) : (
+        ) : hasResidentRole ? (
           <ProspectViewInPortalAction
             signedIn
-            hasResidentRole={hasResidentRole}
-            portalPath="/resident/communication/active"
+            hasResidentRole
+            portalPath={communicationReturn}
             dataAttr="message-success-view-in-portal"
+          />
+        ) : (
+          <ProspectAccountHandoff
+            title="Add a resident account to read replies in PropLane"
+            description="Your message was sent. Add a resident account on your login to read manager replies in Communication."
+            createAccountHref={createAccountHref}
+            signInHref={signInHref}
+            createAccountDataAttr="message-success-create-resident-account"
+            signInDataAttr="message-success-sign-in-existing"
           />
         )}
 
@@ -441,6 +453,22 @@ function MessageFlow({
             Send another message
           </button>
         </div>
+      </div>
+    );
+  }
+
+  if (!contactAutofill.ready) {
+    return (
+      <div className={`${PUBLIC_PROSPECT_CANVAS_CLASS} text-sm text-muted`} aria-busy="true">
+        Loading…
+      </div>
+    );
+  }
+
+  if (messageGateView === "resident-portal") {
+    return (
+      <div className="mt-8">
+        <ProspectResidentPortalMessagePrompt propertyId={propertyId} propertyTitle={propertyTitle} />
       </div>
     );
   }

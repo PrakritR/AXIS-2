@@ -11,6 +11,10 @@ import {
   prospectSignInHref,
   type ProspectActionKind,
 } from "@/lib/prospect-public-gate";
+import {
+  residentPortalListingMessagePath,
+  stageResidentListingMessageCompose,
+} from "@/lib/prospect-public-nav";
 import { useProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
 import { residentCreateAccountHref } from "@/lib/resident-public-nav";
 
@@ -136,6 +140,48 @@ export function ProspectGuestAccountGate({
       >
         {copy.guestLabel}
       </Button>
+    </div>
+  );
+}
+
+/** Signed-in resident — message from Communication, not the public lead form. */
+export function ProspectResidentPortalMessagePrompt({
+  propertyId,
+  propertyTitle,
+}: {
+  propertyId: string;
+  propertyTitle?: string;
+}) {
+  const listing = propertyTitle?.trim() || "this listing";
+  const portalPath = residentPortalListingMessagePath(propertyId);
+
+  return (
+    <div className="mx-auto w-full max-w-3xl py-2 sm:py-4">
+      <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">Resident account</p>
+      <h2 className="mt-2 text-lg font-bold tracking-tight text-foreground sm:text-xl">
+        Message your manager in Communication
+      </h2>
+      <p className="mt-2 text-sm leading-relaxed text-muted">
+        You already have a resident account — send questions about {listing} from PropLane Communication so manager
+        replies stay in one place with your applications, lease, and payments.
+      </p>
+      <div className={`mt-4 ${gateButtonRowClass()}`}>
+        <Link
+          href={portalPath}
+          className={gatePrimaryBtnClass()}
+          data-attr="prospect-message-open-communication"
+          onClick={() => stageResidentListingMessageCompose(propertyId)}
+        >
+          Open Communication
+        </Link>
+        <Link
+          href="/resident/communication/active"
+          className={gateSecondaryBtnClass()}
+          data-attr="prospect-message-open-inbox"
+        >
+          Go to inbox
+        </Link>
+      </div>
     </div>
   );
 }

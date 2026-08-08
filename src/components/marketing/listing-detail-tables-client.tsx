@@ -22,6 +22,7 @@ import {
   isClawMessagingPubliclyEnabled,
 } from "@/lib/claw-leasing-links";
 import { useProspectListingHrefs } from "@/hooks/use-prospect-listing-hrefs";
+import { listingApplyLabel, listingMessageLabel } from "@/lib/listing-prospect-cta-labels";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
@@ -355,12 +356,14 @@ function ListingModalCta({
   variant,
   dataAttr,
   newTabProps,
+  onClick,
 }: {
   href: string;
   label: string;
   variant: "primary" | "secondary";
   dataAttr?: string;
   newTabProps: ReturnType<typeof listingLinkTargetProps>;
+  onClick?: () => void;
 }) {
   const className =
     variant === "primary"
@@ -375,7 +378,7 @@ function ListingModalCta({
     );
   }
   return (
-    <Link href={href} className="flex-1" data-attr={dataAttr} {...newTabProps}>
+    <Link href={href} className="flex-1" data-attr={dataAttr} onClick={onClick} {...newTabProps}>
       <span className={className}>{label}</span>
     </Link>
   );
@@ -386,8 +389,8 @@ function ListingModalActions({
   secondary,
   newTabProps,
 }: {
-  primary: { href: string; label: string; dataAttr?: string };
-  secondary: { href: string; label: string; dataAttr?: string };
+  primary: { href: string; label: string; dataAttr?: string; onClick?: () => void };
+  secondary: { href: string; label: string; dataAttr?: string; onClick?: () => void };
   newTabProps: ReturnType<typeof listingLinkTargetProps>;
 }) {
   return (
@@ -398,6 +401,7 @@ function ListingModalActions({
         variant="primary"
         dataAttr={primary.dataAttr}
         newTabProps={newTabProps}
+        onClick={primary.onClick}
       />
       <ListingModalCta
         href={secondary.href}
@@ -405,6 +409,7 @@ function ListingModalActions({
         variant="secondary"
         dataAttr={secondary.dataAttr}
         newTabProps={newTabProps}
+        onClick={secondary.onClick}
       />
     </div>
   );
@@ -494,7 +499,8 @@ export function ListingDetailModal({
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
   const textEnabled = isClawMessagingPubliclyEnabled(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
-  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
+  const { applyHref: webApplyHref, messageHref: webMessageHref, stageMessageCompose } =
+    useProspectListingHrefs(listingPropertyId);
   const textApplyHref = textEnabled
     ? buildSmsDeepLink({ intent: "apply", propertyId: listingPropertyId, propertyLabel: label, toPhone: contactSmsPhone })
     : webApplyHref;
@@ -505,8 +511,10 @@ export function ListingDetailModal({
     textEnabled
       ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, topic, toPhone: contactSmsPhone })
       : webMessageHref;
-  const applyLabel = textEnabled ? "Text to apply" : "Apply online";
-  const messageLabel = textEnabled ? "Text a message" : "Contact leasing";
+  const applyLabel = listingApplyLabel(textEnabled);
+  const messageLabel = listingMessageLabel(textEnabled);
+  const stageWebMessageCompose = textEnabled ? undefined : stageMessageCompose;
+  const messageCtaExtras = { onClick: stageWebMessageCompose };
 
   useEffect(() => {
     if (!state) return;
@@ -690,6 +698,7 @@ export function ListingDetailModal({
                       href: textMessageHref,
                       label: messageLabel,
                       dataAttr: "listing-text-message",
+                      ...messageCtaExtras,
                     }}
                   />
                 </>
@@ -730,6 +739,7 @@ export function ListingDetailModal({
                 href: textMessageAbout("the floor plan / layout"),
                 label: messageLabel,
                 dataAttr: "listing-text-message-layout",
+                ...messageCtaExtras,
               }}
               secondary={{
                 href: textApplyHref,
@@ -777,6 +787,7 @@ export function ListingDetailModal({
                 href: textMessageAbout("this bathroom"),
                 label: messageLabel,
                 dataAttr: "listing-text-message-bathroom",
+                ...messageCtaExtras,
               }}
               secondary={{
                 href: textApplyHref,
@@ -817,6 +828,7 @@ export function ListingDetailModal({
                 href: textMessageHref,
                 label: messageLabel,
                 dataAttr: "listing-text-message",
+                ...messageCtaExtras,
               }}
             />
           </ListingModalBody>
@@ -850,6 +862,7 @@ export function ListingDetailModal({
                 href: textMessageAbout("lease terms"),
                 label: messageLabel,
                 dataAttr: "listing-text-message-lease",
+                ...messageCtaExtras,
               }}
             />
           </ListingModalBody>
@@ -906,6 +919,7 @@ export function ListingDetailModal({
                 href: textMessageHref,
                 label: messageLabel,
                 dataAttr: "listing-text-message",
+                ...messageCtaExtras,
               }}
             />
           </ListingModalBody>
@@ -925,6 +939,7 @@ export function ListingDetailModal({
                 href: textMessageHref,
                 label: messageLabel,
                 dataAttr: "listing-text-message",
+                ...messageCtaExtras,
               }}
               secondary={{
                 href: textApplyHref,
