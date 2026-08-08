@@ -1,7 +1,7 @@
 "use client";
 
-import type { ReactNode } from "react";
-import { Building2, ChevronDown, LayoutDashboard, MessagesSquare, Users } from "lucide-react";
+import { PortalNavIcon } from "@/components/portal/admin-portal-nav-icons";
+import { Building2, ChevronRight, LayoutDashboard, MessagesSquare, Users } from "lucide-react";
 import {
   PORTAL_NATIVE_BOTTOM_NAV_CLASS,
   PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS,
@@ -10,10 +10,6 @@ import {
   PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
 } from "@/lib/portal-layout-classes";
 import { cn } from "@/lib/utils";
-
-const DOT_PENDING = "var(--status-pending-fg)";
-const DOT_OVERDUE = "var(--status-overdue-fg)";
-const DOT_CONFIRMED = "var(--status-confirmed-fg)";
 
 const KPI_TILES = [
   { label: "Rooms vacant", value: "1", tone: "warning" as const, emphasis: true },
@@ -51,6 +47,14 @@ const KPI_TONE_STYLES = {
   },
 } as const;
 
+/** Overflow manager sections — same labels as `proPortal` / the native More sheet. */
+const MORE_SHEET_TABS = [
+  { section: "calendar", label: "Calendar" },
+  { section: "applications", label: "Applications" },
+  { section: "leases", label: "Leases" },
+  { section: "payments", label: "Payments" },
+] as const;
+
 const BOTTOM_TABS = [
   { section: "properties", label: "Properties", icon: Building2 },
   { section: "residents", label: "Residents", icon: Users },
@@ -74,10 +78,7 @@ function MoreGridIcon() {
   );
 }
 
-/**
- * Marketing phone frame — manager dashboard as rendered in the native app shell.
- * Labels and layout mirror `manager-dashboard.tsx` + native bottom-nav primary tabs.
- */
+/** Marketing phone frame — manager dashboard + native More sheet tabs. */
 export function MobileAppPreview({ className }: { className?: string }) {
   return (
     <div
@@ -123,198 +124,57 @@ export function MobileAppPreview({ className }: { className?: string }) {
                 );
               })}
             </div>
+          </div>
 
-            <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-2">
-                <span aria-hidden className="text-lg leading-none text-primary">
-                  ✦
-                </span>
-                <h3 className="text-lg font-bold tracking-[-0.02em] text-foreground">Needs attention</h3>
-                <span className="ml-auto inline-flex items-center gap-1.5 rounded-full border border-border bg-[var(--secondary)] px-2 py-0.5 text-[10px] font-medium text-muted">
-                  <span aria-hidden className="size-1.5 rounded-full" style={{ background: DOT_CONFIRMED }} />
-                  4 open
-                </span>
-              </div>
-
-              <PreviewAttentionGroup
-                title="Tour requests"
-                toneColor={DOT_PENDING}
-                toneBg="var(--status-pending-bg)"
-                count={1}
-              >
-                <PreviewIssueRow
-                  dot={DOT_PENDING}
-                  title="Cascade 4B · Sat 11:00a"
-                  subtitle="Priya N. · Cascade Court"
-                  pill="Pending"
-                  pillTone="pending"
-                />
-              </PreviewAttentionGroup>
-
-              <PreviewAttentionGroup
-                title="Applications to sign"
-                toneColor={DOT_PENDING}
-                toneBg="var(--status-pending-bg)"
-                count={1}
-              >
-                <PreviewIssueRow
-                  dot={DOT_PENDING}
-                  title="Maya Chen"
-                  subtitle="Cascade Lofts · Room 4B"
-                  pill="To sign"
-                  pillTone="pending"
-                />
-              </PreviewAttentionGroup>
-
-              <PreviewAttentionGroup
-                title="Pending & overdue payments"
-                toneColor={DOT_OVERDUE}
-                toneBg="var(--status-overdue-bg)"
-                count={1}
-                badge={
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--status-overdue-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    1 overdue
-                  </span>
-                }
-              >
-                <PreviewIssueRow
-                  dot={DOT_OVERDUE}
-                  title="Jordan Lee"
-                  subtitle="Rent · Maple 2A · due Apr 1"
-                  pill="Overdue"
-                  pillTone="danger"
-                />
-              </PreviewAttentionGroup>
+          <div className="pointer-events-none absolute inset-x-2 bottom-[3.35rem] z-20 rounded-t-2xl border border-border bg-background px-2 pb-2 pt-3 shadow-[0_-12px_40px_rgba(15,23,42,0.12)]">
+            <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border" aria-hidden />
+            <p className="px-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted">Portal sections</p>
+            <div className="mt-2 space-y-1">
+              {MORE_SHEET_TABS.map((tab) => (
+                <div
+                  key={tab.section}
+                  className="flex min-h-10 items-center gap-2.5 rounded-xl px-2.5 py-2 text-[13px] font-medium text-foreground"
+                >
+                  <PortalNavIcon section={tab.section} className="h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">{tab.label}</span>
+                  <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted/60" aria-hidden />
+                </div>
+              ))}
             </div>
           </div>
 
           <nav
             className={cn(
               PORTAL_NATIVE_BOTTOM_NAV_CLASS,
-              "absolute inset-x-0 bottom-0 !z-10 border-t border-border bg-background/95 backdrop-blur-xl",
+              "absolute inset-x-0 bottom-0 !z-30 border-t border-border bg-background/95 backdrop-blur-xl",
             )}
           >
             <div className="grid grid-cols-5">
-              {BOTTOM_TABS.map(({ section, label, icon: Icon }) => {
-                const active = section === "dashboard";
-                return (
+              {BOTTOM_TABS.map(({ section, label, icon: Icon }) => (
                 <div
                   key={section}
-                  className={cn(
-                    PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS,
-                    active ? "text-primary" : "text-muted",
-                  )}
+                  className={cn(PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS, "text-muted")}
                 >
-                  {active ? (
-                    <span
-                      className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary"
-                      aria-hidden
-                    />
-                  ) : null}
                   <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS}>
-                    <Icon className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} strokeWidth={active ? 2.25 : 2} />
+                    <Icon className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} strokeWidth={2} />
                   </span>
-                  {section !== "dashboard" ? (
-                    <span
-                      className={cn(
-                        PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
-                        active ? "text-primary" : "text-muted",
-                      )}
-                    >
-                      {label}
-                    </span>
-                  ) : null}
+                  <span className={cn(PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS, "text-muted")}>{label}</span>
                 </div>
-                );
-              })}
-              <div className={cn(PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS, "text-muted")}>
+              ))}
+              <div className={cn(PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS, "text-primary")}>
+                <span
+                  className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary"
+                  aria-hidden
+                />
                 <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS}>
                   <MoreGridIcon />
                 </span>
-                <span className={cn(PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS, "text-muted")}>More</span>
+                <span className={cn(PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS, "text-primary")}>More</span>
               </div>
             </div>
           </nav>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PreviewAttentionGroup({
-  title,
-  toneColor,
-  toneBg,
-  count,
-  badge,
-  children,
-}: {
-  title: string;
-  toneColor: string;
-  toneBg: string;
-  count: number;
-  badge?: ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="overflow-hidden rounded-xl border border-border bg-card"
-      style={{
-        borderLeftWidth: 3,
-        borderLeftColor: toneColor,
-        background: `color-mix(in srgb, ${toneBg} 32%, var(--card))`,
-      }}
-    >
-      <div className="flex items-center gap-2 px-3 py-2">
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" strokeWidth={2.25} aria-hidden />
-        <h4 className="min-w-0 flex-1 text-[13px] font-semibold leading-none" style={{ color: toneColor }}>
-          {title}
-        </h4>
-        <span
-          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
-          style={{ color: toneColor, background: `color-mix(in srgb, ${toneBg} 55%, transparent)` }}
-        >
-          {count}
-        </span>
-        {badge}
-        <span className="shrink-0 text-xs font-semibold" style={{ color: toneColor }}>
-          →
-        </span>
-      </div>
-      <div className="border-t border-border">{children}</div>
-    </div>
-  );
-}
-
-function PreviewIssueRow({
-  dot,
-  title,
-  subtitle,
-  pill,
-  pillTone,
-}: {
-  dot: string;
-  title: string;
-  subtitle: string;
-  pill: string;
-  pillTone: "pending" | "danger";
-}) {
-  return (
-    <div className="flex items-center gap-2.5 px-3 py-2">
-      <span aria-hidden className="size-2 shrink-0 rounded-full" style={{ background: dot }} />
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-[13px] font-semibold text-foreground">{title}</span>
-        <span className="mt-0.5 block truncate text-[11px] text-muted">{subtitle}</span>
-      </span>
-      <span
-        className={cn(
-          "inline-flex shrink-0 items-center whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-semibold",
-          pillTone === "danger" ? "portal-badge-danger" : "portal-badge-pending",
-        )}
-      >
-        {pill}
-      </span>
     </div>
   );
 }

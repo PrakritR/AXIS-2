@@ -82,6 +82,20 @@ function ResidentMoveInPageContent({ resolved }: { resolved: ResidentMoveInResol
         </section>
       ) : null}
 
+      {resolved.amenities.length > 0 ? (
+        <section className="space-y-4 border-t border-border/40 pt-8">
+          <div>
+            <h2 className="text-base font-semibold text-foreground">Amenities</h2>
+            <p className="mt-1 text-sm text-muted">What this home offers.</p>
+          </div>
+          <ul className="list-disc space-y-1 pl-5 text-foreground">
+            {resolved.amenities.map((amenity) => (
+              <li key={amenity}>{amenity}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <section className="space-y-4 border-t border-border/40 pt-8">
         <div>
           <h2 className="text-base font-semibold text-foreground">Move-in instructions</h2>
@@ -104,7 +118,7 @@ function ResidentMoveInPageContent({ resolved }: { resolved: ResidentMoveInResol
   );
 }
 
-/** House details body — single scrollable page (no routed sub-tabs). */
+/** House details — single scrollable page (placement, housemates, rules, amenities, and move-in instructions). */
 export function ResidentMoveInShell({
   basePath: _basePath = "/resident",
   resolved,

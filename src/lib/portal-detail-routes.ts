@@ -264,6 +264,26 @@ export function residentDocumentsApplicationDetailHref(
   return `${basePath}/documents/application/${encodeURIComponent(applicationId)}`;
 }
 
+/** Resident Documents › Lease list. */
+export function residentDocumentsLeaseListHref(basePath: string): string {
+  return `${basePath}/documents/lease`;
+}
+
+/** Resident Documents › one signed lease detail. */
+export function residentDocumentsLeaseDetailHref(basePath: string, leaseId: string): string {
+  return `${basePath}/documents/lease/${encodeURIComponent(leaseId)}`;
+}
+
+/** Resident Documents › Rent receipts list. */
+export function residentDocumentsReceiptsListHref(basePath: string): string {
+  return `${basePath}/documents/receipts`;
+}
+
+/** Resident Documents › one rent receipt detail. */
+export function residentDocumentsReceiptDetailHref(basePath: string, receiptId: string): string {
+  return `${basePath}/documents/receipts/${encodeURIComponent(receiptId)}`;
+}
+
 export const RESIDENT_TOUR_BUCKETS = ["pending", "confirmed", "declined"] as const;
 export type ResidentTourBucketId = (typeof RESIDENT_TOUR_BUCKETS)[number];
 
@@ -286,10 +306,11 @@ export function residentTourDetailHref(
   return `${basePath}/tour/${bucket}/${encodeURIComponent(inquiryId)}`;
 }
 
-/** Resident house-details tabs (routed under /move-in). */
+/** @deprecated House details is a single page — legacy tab URLs redirect to `/move-in`. */
 export const RESIDENT_MOVE_IN_TABS = ["placement", "housemates", "info", "instructions"] as const;
 export type ResidentMoveInTabId = (typeof RESIDENT_MOVE_IN_TABS)[number];
 
+/** @deprecated */
 export const RESIDENT_MOVE_IN_TAB_LABELS: Record<ResidentMoveInTabId, string> = {
   placement: "Your placement",
   housemates: "Housemates",
@@ -297,6 +318,7 @@ export const RESIDENT_MOVE_IN_TAB_LABELS: Record<ResidentMoveInTabId, string> = 
   instructions: "Instructions",
 };
 
+/** @deprecated */
 export function parseResidentMoveInTab(raw: string | undefined | null): ResidentMoveInTabId {
   if (raw && (RESIDENT_MOVE_IN_TABS as readonly string[]).includes(raw)) {
     return raw as ResidentMoveInTabId;
@@ -304,8 +326,9 @@ export function parseResidentMoveInTab(raw: string | undefined | null): Resident
   return "placement";
 }
 
-export function residentMoveInHref(basePath: string, tab: ResidentMoveInTabId): string {
-  return `${basePath}/move-in/${tab}`;
+/** @deprecated Use `${basePath}/move-in` */
+export function residentMoveInHref(basePath: string, _tab?: ResidentMoveInTabId): string {
+  return `${basePath}/move-in`;
 }
 
 /** Manager lease pipeline tabs (Appendix D5). */

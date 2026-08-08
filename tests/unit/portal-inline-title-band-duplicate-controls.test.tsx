@@ -36,7 +36,6 @@ const PORTAL_DIR = join(process.cwd(), "src/components/portal");
  * would leave the section with zero controls, not one.
  */
 const SPLIT_SHAPE_PANELS = [
-  "resident-documents-panel.tsx",
   "resident-lease-panel.tsx",
   "resident-payments-panel.tsx",
 ];

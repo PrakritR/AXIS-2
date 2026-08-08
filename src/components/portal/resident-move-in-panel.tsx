@@ -5,7 +5,6 @@ import { loadResidentMoveInForEmail } from "@/lib/resident-move-in-info";
 
 type ResidentMoveInPanelProps = {
   residentEmail?: string | null;
-  tab?: string;
   basePath?: string;
 };
 
