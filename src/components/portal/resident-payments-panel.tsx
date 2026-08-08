@@ -72,7 +72,9 @@ import {
   residentChargesListHref,
 } from "@/lib/portal-detail-routes";
 import { ResidentManualPaymentPanel } from "@/components/portal/resident-manual-payment-panel";
-import { ResidentChargeMessageModal } from "@/components/portal/resident-charge-message-modal";
+import { stageResidentComposePrefill } from "@/lib/resident-compose-prefill";
+import { residentChargeManagerMessageDraft } from "@/lib/resident-manager-message-draft";
+import { RESIDENT_PORTAL_BASE_PATH } from "@/lib/portals/resident-sections";
 
 
 type PayConfirmState = {
@@ -185,7 +187,6 @@ export function ResidentPaymentsPanel({
   const [paymentMethod, setPaymentMethod] = useState<ResidentPayMethod>("ach");
   const [payConfirm, setPayConfirm] = useState<PayConfirmState | null>(null);
   const [manualPayConfirm, setManualPayConfirm] = useState<PayConfirmState | null>(null);
-  const [chargeMessageTarget, setChargeMessageTarget] = useState<HouseholdCharge | null>(null);
   const [payModalStep, setPayModalStep] = useState<"select" | "pay">("select");
   const [reportingManualPayment, setReportingManualPayment] = useState(false);
   const [tick, setTick] = useState(0);
@@ -199,6 +200,14 @@ export function ResidentPaymentsPanel({
   const [applicationTick, setApplicationTick] = useState(0);
   const email = session.email?.trim() ?? null;
   const userId = session.userId;
+
+  const openMessageManagerForCharge = useCallback(
+    (charge: HouseholdCharge) => {
+      stageResidentComposePrefill(residentChargeManagerMessageDraft(charge));
+      portalNavigate(`${RESIDENT_PORTAL_BASE_PATH}/communication/active`);
+    },
+    [portalNavigate],
+  );
 
   const paymentsUnlocked = useMemo(() => {
     void applicationTick;
@@ -1034,7 +1043,7 @@ export function ResidentPaymentsPanel({
           data-attr="resident-payments-message-manager"
           onClick={(event) => {
             event.stopPropagation();
-            setChargeMessageTarget(row);
+            openMessageManagerForCharge(row);
           }}
         >
           Message manager
@@ -1530,15 +1539,6 @@ export function ResidentPaymentsPanel({
       ) : null}
     </Modal>
 
-    <ResidentChargeMessageModal
-      open={chargeMessageTarget !== null}
-      charge={chargeMessageTarget}
-      onClose={() => setChargeMessageTarget(null)}
-      onSent={(charge) => {
-        applyHouseholdChargePatches([charge]);
-        refresh();
-      }}
-    />
     </>
   );
 

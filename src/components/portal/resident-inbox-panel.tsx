@@ -47,7 +47,10 @@ import {
   inboxThreadCounterpartyEmail,
   type InboxThreadMessage,
 } from "@/lib/portal-inbox-storage";
-import { buildOptimisticSentThread, markThreadMessageDelivery } from "@/lib/inbox-message-timeline";
+import {
+  consumeResidentComposePrefill,
+  type ResidentComposePrefill,
+} from "@/lib/resident-compose-prefill";
 import {
   INBOX_MAX_ATTACHMENTS,
   attachmentMetaFromUrls,
@@ -140,7 +143,7 @@ export function residentReplySentToastMessage(outcome: ResidentReplySendOutcome)
 }
 
 export type ResidentInboxPanelHandle = {
-  openCompose: () => void;
+  openCompose: (draft?: ResidentComposePrefill) => void;
   emptyTrash: () => void;
   findThreadForRecipient: (email: string) => string | null;
 };
@@ -215,6 +218,7 @@ export const ResidentInboxPanel = forwardRef<
   const [replyAttachments, setReplyAttachments] = useState<InboxComposerAttachment[]>([]);
   const [smsConfigured, setSmsConfigured] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [composeDraft, setComposeDraft] = useState<ResidentComposePrefill | null>(null);
   // Threads marked read while viewing "Unopened" stay listed until the tab is
   // switched or the page is refreshed; they only move to "Opened" on reset.
   const [retainedIds, setRetainedIds] = useState<Set<string>>(() => new Set());
@@ -275,6 +279,13 @@ export const ResidentInboxPanel = forwardRef<
       active = false;
     };
   }, [composeOpen]);
+
+  useEffect(() => {
+    const prefill = consumeResidentComposePrefill();
+    if (!prefill) return;
+    setComposeDraft(prefill);
+    setComposeOpen(true);
+  }, []);
 
   useEffect(() => {
     if (tabId !== "schedule") return;
@@ -632,7 +643,10 @@ export const ResidentInboxPanel = forwardRef<
   useImperativeHandle(
     ref,
     () => ({
-      openCompose: () => setComposeOpen(true),
+      openCompose: (draft?: ResidentComposePrefill) => {
+        if (draft) setComposeDraft(draft);
+        setComposeOpen(true);
+      },
       emptyTrash,
       findThreadForRecipient,
     }),
@@ -642,6 +656,7 @@ export const ResidentInboxPanel = forwardRef<
   const handleComposeSend = useCallback(
     (p: ScopedInboxSendPayload) => {
       setComposeOpen(false);
+      setComposeDraft(null);
       const senderName = p.senderName.trim() || "Resident";
       const senderEmail = session.email?.trim().toLowerCase() || p.senderEmail;
 
@@ -682,6 +697,7 @@ export const ResidentInboxPanel = forwardRef<
           const primaryRecipient =
             directEmails.length === 1 && p.broadcastCategories.length === 0 ? directEmails[0]! : null;
           let optimisticId: string | null = null;
+          let propertyThreadId: string | undefined;
 
           if (primaryRecipient) {
             const optimistic = buildOptimisticSentThread({
@@ -711,9 +727,16 @@ export const ResidentInboxPanel = forwardRef<
                 text: p.body.trim(),
                 deliverToPortalInbox: true,
                 eventCategory: "messages",
+                propertyId: p.propertyId,
+                propertyTitle: p.propertyTitle,
+                managerUserId: p.managerUserId,
               }),
             });
-            const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
+            const data = (await res.json().catch(() => ({}))) as {
+              ok?: boolean;
+              error?: string;
+              propertyThreadId?: string;
+            };
             if (!res.ok || !data.ok) {
               if (optimisticId) {
                 setPendingSendingThreadIds((prev) => {
@@ -732,6 +755,7 @@ export const ResidentInboxPanel = forwardRef<
               showToast(data.error ?? "Message could not be sent.");
               return;
             }
+            propertyThreadId = data.propertyThreadId?.trim() || undefined;
           }
           if (optimisticId) {
             setPendingSendingThreadIds((prev) => {
@@ -745,9 +769,13 @@ export const ResidentInboxPanel = forwardRef<
           setLocal(rows as InboxThread[]);
           persistInboxRef.current = true;
           showToast("Message sent.");
-          if (embeddedInCommunication && primaryRecipient) {
-            const threadId = findThreadForRecipient(primaryRecipient);
-            if (threadId) setExpandedId(threadId);
+          if (embeddedInCommunication) {
+            if (propertyThreadId) {
+              setExpandedId(propertyThreadId);
+            } else if (primaryRecipient) {
+              const threadId = findThreadForRecipient(primaryRecipient);
+              if (threadId) setExpandedId(threadId);
+            }
           } else {
             navigate("/resident/communication/email/sent");
           }
@@ -1328,12 +1356,16 @@ export const ResidentInboxPanel = forwardRef<
       ) : null}
       <ScopedInboxComposeModal
         open={composeOpen}
-        onClose={() => setComposeOpen(false)}
+        onClose={() => {
+          setComposeOpen(false);
+          setComposeDraft(null);
+        }}
         onSend={handleComposeSend}
         portal="resident"
         senderName="Resident"
         senderEmail={session.email?.trim().toLowerCase() || "resident@example.com"}
         liveContacts={eligibleContacts}
+        initialDraft={composeDraft}
       />
 
       {tabId !== "schedule" && !suppressListPane ? (

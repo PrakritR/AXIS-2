@@ -36,6 +36,7 @@ import {
   type InboxRecipientCategory,
   type InboxScopedContact,
 } from "@/data/inbox-scoped-directory";
+import type { ResidentComposePrefill } from "@/lib/resident-compose-prefill";
 
 export type ScopedInboxSendPayload = {
   subject: string;
@@ -55,6 +56,10 @@ export type ScopedInboxSendPayload = {
   /** Delivery channels for manager portal compose. */
   deliverViaEmail?: boolean;
   deliverViaSms?: boolean;
+  /** Property-scoped resident → manager thread (tour, listing, charge). */
+  propertyId?: string;
+  propertyTitle?: string;
+  managerUserId?: string;
 };
 
 type ComposeCategory = InboxComposeDirectoryCategory;
@@ -129,6 +134,7 @@ export function ScopedInboxComposeModal({
   senderName = "Portal user",
   senderEmail = "portal-user@example.com",
   liveContacts = [],
+  initialDraft = null,
 }: {
   open: boolean;
   onClose: () => void;
@@ -138,6 +144,7 @@ export function ScopedInboxComposeModal({
   senderName?: string;
   senderEmail?: string;
   liveContacts?: InboxScopedContact[];
+  initialDraft?: ResidentComposePrefill | null;
 }) {
   const { showToast } = useAppUi();
   const localContacts = useMemo(() => contactsForPortal(portal, liveContacts), [portal, liveContacts]);
@@ -151,6 +158,11 @@ export function ScopedInboxComposeModal({
   const [sendVia, setSendVia] = useState<string[]>(["email"]);
   const [scheduleLater, setScheduleLater] = useState(false);
   const [sendAt, setSendAt] = useState(defaultPortalMessageScheduleAt);
+  const [propertyContext, setPropertyContext] = useState<{
+    propertyId?: string;
+    propertyTitle?: string;
+    managerUserId?: string;
+  } | null>(null);
 
   const { viaEmail, viaSms } = portalMessageChannelsFromSelection(sendVia);
 
@@ -232,15 +244,41 @@ export function ScopedInboxComposeModal({
   useEffect(() => {
     if (!open) return;
     queueMicrotask(() => {
-      setSelectedCategories([]);
-      setSelectedKeys([]);
-      setSubject("");
-      setBody("");
+      const draft = initialDraft;
+      if (draft?.subject?.trim() && draft?.body?.trim()) {
+        setSubject(draft.subject.trim());
+        setBody(draft.body.trim());
+        setPropertyContext({
+          propertyId: draft.propertyId?.trim() || undefined,
+          propertyTitle: draft.propertyTitle?.trim() || undefined,
+          managerUserId: draft.managerUserId?.trim() || undefined,
+        });
+      } else {
+        setSubject("");
+        setBody("");
+        setPropertyContext(null);
+        setSelectedCategories([]);
+        setSelectedKeys([]);
+      }
       setSendVia(defaultPortalMessageChannelSelection(true, showSmsOption, true, false));
       setScheduleLater(false);
       setSendAt(defaultPortalMessageScheduleAt());
     });
-  }, [open, portal]);
+  }, [open, portal, initialDraft, showSmsOption]);
+
+  useEffect(() => {
+    if (!open || !initialDraft || contacts.length === 0) return;
+    const email = initialDraft.recipientEmail?.trim().toLowerCase();
+    const managerId = initialDraft.managerUserId?.trim();
+    const hit =
+      (managerId
+        ? contacts.find((c) => c.id === `mgr-${managerId}` || c.id === managerId)
+        : undefined) ??
+      (email ? contacts.find((c) => c.email.trim().toLowerCase() === email) : undefined);
+    if (!hit || hit.role !== "manager") return;
+    setSelectedCategories(["management"]);
+    setSelectedKeys([`id:${hit.id}` as PersonKey]);
+  }, [open, initialDraft, contacts]);
 
   useEffect(() => {
     setSelectedCategories((prev) => prev.filter((c) => categoryOptions.includes(c)));
@@ -370,6 +408,9 @@ export function ScopedInboxComposeModal({
       sendAt: scheduleLater ? new Date(sendAt).toISOString() : undefined,
       deliverViaEmail: viaEmail,
       deliverViaSms: showSmsOption ? viaSms : false,
+      propertyId: propertyContext?.propertyId,
+      propertyTitle: propertyContext?.propertyTitle,
+      managerUserId: propertyContext?.managerUserId,
     });
   };
 

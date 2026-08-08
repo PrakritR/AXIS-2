@@ -18,6 +18,8 @@ import { formatRangeLabel } from "@/lib/demo-admin-scheduling";
 import { formatTourContactPhoneDisplay } from "@/lib/tour-contact-quality";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { stageResidentComposePrefill } from "@/lib/resident-compose-prefill";
+import { residentTourManagerMessageDraft } from "@/lib/resident-manager-message-draft";
 import {
   residentTourDetailHref,
   residentTourListHref,
@@ -38,34 +40,10 @@ const TOUR_DETAIL_TABS = [
 
 type TourDetailTabId = (typeof TOUR_DETAIL_TABS)[number]["id"];
 
-function statusLabel(tour: ResidentTourView): string {
-  if (tour.confirmed) return "Confirmed";
-  const status = tour.status.trim().toLowerCase();
-  if (status === "pending") return "Pending approval";
-  if (status === "declined") return "Declined";
-  return tour.status || "Pending";
-}
-
-function statusBadgeClass(tour: ResidentTourView): string {
-  if (tour.confirmed) return "portal-badge-success";
-  if (tour.status.trim().toLowerCase() === "declined") return "portal-badge-danger";
-  return "portal-badge-pending";
-}
-
 function tourWhenLabel(tour: ResidentTourView): string {
   const whenStart = tour.confirmedStart ?? tour.proposedStart;
   const whenEnd = tour.confirmedEnd ?? tour.proposedEnd;
   return whenStart && whenEnd ? formatRangeLabel(whenStart, whenEnd) : "Time to be confirmed";
-}
-
-function TourStatusBadge({ tour }: { tour: ResidentTourView }) {
-  return (
-    <span
-      className={`inline-flex rounded-full px-2.5 py-0.5 text-[10px] font-semibold ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)] ${statusBadgeClass(tour)}`}
-    >
-      {statusLabel(tour)}
-    </span>
-  );
 }
 
 function TourOutcomeBanner({ tour }: { tour: ResidentTourView }) {
@@ -110,11 +88,13 @@ function TourDetailBody({
   basePath,
   detailTab,
   onDetailTabChange,
+  onMessageManager,
 }: {
   tour: ResidentTourView;
   basePath: string;
   detailTab: TourDetailTabId;
   onDetailTabChange: (tab: TourDetailTabId) => void;
+  onMessageManager: () => void;
 }) {
   const applyHref = tour.propertyId
     ? buildRentalApplyHref({
@@ -142,9 +122,6 @@ function TourDetailBody({
         <div className="space-y-5">
           <div className="rounded-2xl border border-border bg-accent/25 px-4 py-4 text-sm">
             <p className="font-semibold text-foreground">{tourWhenLabel(tour)}</p>
-            <div className="mt-2">
-              <TourStatusBadge tour={tour} />
-            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -179,10 +156,14 @@ function TourDetailBody({
                 Apply for this property
               </Link>
             </Button>
-            <Button type="button" variant="outline" className="rounded-full" asChild>
-              <Link href={`${basePath}/communication/active`} data-attr="resident-tour-message-manager">
-                Message your manager
-              </Link>
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full"
+              data-attr="resident-tour-message-manager"
+              onClick={onMessageManager}
+            >
+              Message your manager
             </Button>
           </PortalSectionActionRow>
         </div>
@@ -251,6 +232,15 @@ export function ResidentTourPanel({
   }
 
   const openScheduleTour = () => setScheduleTourOpen(true);
+
+  const openMessageManager = useCallback(
+    (tour: ResidentTourView) => {
+      const draft = residentTourManagerMessageDraft(tour);
+      stageResidentComposePrefill(draft);
+      navigate(`${basePath}/communication/active`);
+    },
+    [basePath, navigate],
+  );
 
   /**
    * A failed read is never rendered as "you have no tours".
@@ -416,7 +406,6 @@ export function ResidentTourPanel({
                     title={stripPropertyRoomCountSuffix(tour.propertyTitle ?? "Property tour")}
                     address={address || tourWhenLabel(tour)}
                     summary={tourWhenLabel(tour)}
-                    badge={<TourStatusBadge tour={tour} />}
                     onOpen={() =>
                       navigate(residentTourDetailHref(basePath, residentTourBucketForView(tour), tour.inquiryId))
                     }
@@ -474,13 +463,13 @@ export function ResidentTourPanel({
         bareHeader
         dataAttrBack="resident-tour-detail-back"
         inlineActions
-        actions={<TourStatusBadge tour={detailTour} />}
       >
         <TourDetailBody
           tour={detailTour}
           basePath={basePath}
           detailTab={detailTab}
           onDetailTabChange={setDetailTab}
+          onMessageManager={() => openMessageManager(detailTour)}
         />
       </PortalRecordDetailPage>
     );
