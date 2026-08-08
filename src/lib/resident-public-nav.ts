@@ -51,6 +51,7 @@ export function residentSignInHref(
     email?: string;
     fullName?: string;
     phone?: string;
+    handoff?: "message";
   },
 ): string {
   const baseNext = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
@@ -68,6 +69,7 @@ export function residentSignInHref(
   const phone = opts?.phone?.trim();
   if (phone) q.set("phone", phone);
   if (tourInquiryId) q.set("tour_inquiry", tourInquiryId);
+  if (opts?.handoff === "message") q.set("handoff", "message");
   return `/auth/sign-in?${q.toString()}`;
 }
 

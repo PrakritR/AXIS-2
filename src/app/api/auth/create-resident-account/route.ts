@@ -35,7 +35,7 @@ function safeResidentRedirect(raw: unknown): string {
  *    resident portal. The portal switcher moves them back to the manager side
  *    without signing out.
  *
- * Optional JSON body: `{ redirectTo?: string }` — must start with `/resident`.
+ * Optional JSON body: `{ redirectTo?: string; contactEmail?: string; phone?: string }`.
  */
 export async function POST(req: Request) {
   try {
@@ -47,11 +47,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "You must be signed in." }, { status: 401 });
     }
 
-    const body = (await req.json().catch(() => ({}))) as { redirectTo?: string };
+    const body = (await req.json().catch(() => ({}))) as {
+      redirectTo?: string;
+      contactEmail?: string;
+      phone?: string;
+    };
     const redirectTo = safeResidentRedirect(body.redirectTo);
+    const contactEmail = typeof body.contactEmail === "string" ? body.contactEmail.trim() : "";
+    const phone = typeof body.phone === "string" ? body.phone.trim() : "";
 
     const service = createSupabaseServiceRoleClient();
-    const ensured = await ensureSignedInResidentAccount(service, user);
+    const ensured = await ensureSignedInResidentAccount(service, user, {
+      contactEmail: contactEmail || undefined,
+      phone: phone || undefined,
+    });
     if (!ensured.ok) {
       return NextResponse.json({ error: ensured.error }, { status: 500 });
     }

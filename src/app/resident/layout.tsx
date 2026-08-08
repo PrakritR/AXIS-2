@@ -7,6 +7,7 @@ import { PortalMobileNavBar } from "@/components/portal/portal-mobile-nav-bar";
 import { PortalSessionKeepalive } from "@/components/portal/portal-session-keepalive";
 import { ResidentPreApplicationGuard } from "@/components/portal/resident-pre-application-guard";
 import { ResidentTourLinkOnMount } from "@/components/portal/resident-tour-link-on-mount";
+import { ResidentProspectHandoffOnMount } from "@/components/portal/resident-prospect-handoff-on-mount";
 import { PortalSidebar } from "@/components/portal/portal-sidebar";
 import { PortalSkipLink } from "@/components/portal/portal-skip-link";
 import { PortalTopBar } from "@/components/portal/portal-top-bar";
@@ -92,6 +93,7 @@ export default async function ResidentLayout({ children }: { children: React.Rea
               />
               <Suspense fallback={null}>
                 <ResidentTourLinkOnMount />
+                <ResidentProspectHandoffOnMount />
               </Suspense>
               <ResidentPreApplicationGuard access={access}>
                 {children}

@@ -60,6 +60,7 @@ function ResidentOauthFinishContent() {
             handoff: prospectHandoff?.handoff,
             fullName: prospectHandoff?.fullName,
             phone: prospectHandoff?.phone,
+            email: prospectHandoff?.email,
             nextPath: prospectHandoff?.nextPath,
           }),
         });

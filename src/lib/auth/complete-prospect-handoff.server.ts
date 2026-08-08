@@ -5,10 +5,10 @@ import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
 import { normalizeTourContactPhone } from "@/lib/tour-contact-quality";
 import {
-  attachInboxThreadsToResident,
   linkAllTourInquiriesForEmail,
   linkTourInquiryToResident,
   loadTourInquiryById,
+  reconcileProspectInboxThreadsForResident,
 } from "@/lib/tour-resident-link.server";
 import { NextResponse } from "next/server";
 
@@ -25,7 +25,10 @@ function textField(row: Record<string, unknown> | null | undefined, key: string)
 
 export type CompleteProspectHandoffInput = {
   userId: string;
+  /** Prospect form / tour contact email — the Communication identity. */
   email: string;
+  /** Signed-in auth email when it differs from the prospect contact email (OAuth). */
+  authEmail?: string;
   fullName?: string;
   phone?: string;
   tourInquiryId?: string;
@@ -111,8 +114,19 @@ export async function completeProspectHandoffForUser(
       return { ok: false, status: linkResult.status, error: linkResult.error };
     }
     await linkAllTourInquiriesForEmail(db, { userId: input.userId, email });
+    await reconcileProspectInboxThreadsForResident(db, {
+      userId: input.userId,
+      contactEmail: email,
+      authEmail: input.authEmail,
+      phone,
+    });
   } else {
-    await attachInboxThreadsToResident(db, input.userId, email);
+    await reconcileProspectInboxThreadsForResident(db, {
+      userId: input.userId,
+      contactEmail: email,
+      authEmail: input.authEmail,
+      phone,
+    });
   }
 
   const redirectTo =

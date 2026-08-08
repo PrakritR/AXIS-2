@@ -15,13 +15,13 @@ vi.mock("@/lib/analytics/posthog", () => ({
 }));
 vi.mock("@/lib/tour-resident-link.server", () => ({
   linkAllTourInquiriesForEmail: vi.fn().mockResolvedValue(undefined),
-  attachInboxThreadsToResident: vi.fn().mockResolvedValue(undefined),
+  reconcileProspectInboxThreadsForResident: vi.fn().mockResolvedValue(undefined),
 }));
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
-import { linkAllTourInquiriesForEmail, attachInboxThreadsToResident } from "@/lib/tour-resident-link.server";
+import { linkAllTourInquiriesForEmail, reconcileProspectInboxThreadsForResident } from "@/lib/tour-resident-link.server";
 import { POST as createResidentAccount } from "@/app/api/auth/create-resident-account/route";
 
 function postRequest(body?: Record<string, unknown>) {
@@ -87,7 +87,12 @@ describe("POST /api/auth/create-resident-account", () => {
       userId: "mgr-1",
       email: "multi@axis.test",
     });
-    expect(attachInboxThreadsToResident).toHaveBeenCalledWith(service, "mgr-1", "multi@axis.test");
+    expect(reconcileProspectInboxThreadsForResident).toHaveBeenCalledWith(service, {
+      userId: "mgr-1",
+      contactEmail: "multi@axis.test",
+      authEmail: undefined,
+      phone: undefined,
+    });
     // …and the manager's profile is untouched: role unchanged, so no update, no insert.
     expect(update).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();

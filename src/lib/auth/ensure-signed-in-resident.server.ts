@@ -3,8 +3,8 @@ import { normalizePortalRoles } from "@/lib/auth/portal-roles";
 import { primaryRoleWhenAddingResident } from "@/lib/auth/profile-primary-role";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import {
-  attachInboxThreadsToResident,
   linkAllTourInquiriesForEmail,
+  reconcileProspectInboxThreadsForResident,
 } from "@/lib/tour-resident-link.server";
 
 function normalizeEmail(value: string | null | undefined): string {
@@ -22,6 +22,7 @@ export type EnsureSignedInResidentResult =
 export async function ensureSignedInResidentAccount(
   service: SupabaseClient,
   user: { id: string; email?: string | null },
+  options?: { contactEmail?: string | null; phone?: string | null },
 ): Promise<EnsureSignedInResidentResult> {
   const { data: existingProfile } = await service
     .from("profiles")
@@ -29,10 +30,11 @@ export async function ensureSignedInResidentAccount(
     .eq("id", user.id)
     .maybeSingle();
 
-  const email = normalizeEmail(existingProfile?.email ?? user.email);
-  if (!email.includes("@")) {
+  const authEmail = normalizeEmail(existingProfile?.email ?? user.email);
+  if (!authEmail.includes("@")) {
     return { ok: false, error: "Profile email is required." };
   }
+  const contactEmail = normalizeEmail(options?.contactEmail) || authEmail;
 
   const { data: existingRoleRows } = await service.from("profile_roles").select("role").eq("user_id", user.id);
   const currentRoles = normalizePortalRoles(existingRoleRows, existingProfile?.role as string | undefined);
@@ -43,7 +45,7 @@ export async function ensureSignedInResidentAccount(
     if (!existingProfile) {
       const { error } = await service
         .from("profiles")
-        .insert({ id: user.id, email, role: nextPrimaryRole });
+        .insert({ id: user.id, email: contactEmail, role: nextPrimaryRole });
       if (error) return { ok: false, error: error.message };
     } else if (nextPrimaryRole !== existingProfile.role) {
       const { error } = await service.from("profiles").update({ role: nextPrimaryRole }).eq("id", user.id);
@@ -58,8 +60,13 @@ export async function ensureSignedInResidentAccount(
     await ensureProfileRoleRow(service, user.id, "resident");
   }
 
-  await linkAllTourInquiriesForEmail(service, { userId: user.id, email });
-  await attachInboxThreadsToResident(service, user.id, email);
+  await linkAllTourInquiriesForEmail(service, { userId: user.id, email: contactEmail });
+  await reconcileProspectInboxThreadsForResident(service, {
+    userId: user.id,
+    contactEmail,
+    authEmail: contactEmail !== authEmail ? authEmail : undefined,
+    phone: options?.phone,
+  });
 
-  return { ok: true, createdResidentRole: !hadResidentRole, email };
+  return { ok: true, createdResidentRole: !hadResidentRole, email: contactEmail };
 }

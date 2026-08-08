@@ -138,6 +138,7 @@ export function prospectSignInHref(
     email: opts?.email,
     fullName: opts?.fullName,
     phone: opts?.phone,
+    ...(kind === "message" ? { handoff: "message" as const } : {}),
   });
 }
 

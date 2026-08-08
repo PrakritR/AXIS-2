@@ -23,6 +23,7 @@ type Body = {
   handoff?: string;
   fullName?: string;
   phone?: string;
+  email?: string;
   nextPath?: string;
 };
 
@@ -58,6 +59,7 @@ export async function POST(req: Request) {
     const handoff = typeof body.handoff === "string" ? body.handoff.trim() : "";
     const prospectFullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
     const prospectPhone = typeof body.phone === "string" ? body.phone.trim() : "";
+    const prospectEmail = typeof body.email === "string" ? body.email.trim().toLowerCase() : "";
     const prospectNextPath = typeof body.nextPath === "string" ? body.nextPath.trim() : "";
 
     const supabaseAuth = await createSupabaseServerClient();
@@ -73,9 +75,11 @@ export async function POST(req: Request) {
     const oauthEmail = user.email.trim().toLowerCase();
 
     if ((tourInquiryId || handoff === "message") && !token && !axisId) {
+      const contactEmail = prospectEmail.includes("@") ? prospectEmail : oauthEmail;
       const handoffResult = await completeProspectHandoffForUser(service, {
         userId: user.id,
-        email: oauthEmail,
+        email: contactEmail,
+        authEmail: contactEmail !== oauthEmail ? oauthEmail : undefined,
         fullName: prospectFullName || oauthFullName(user.user_metadata),
         phone: prospectPhone,
         tourInquiryId: tourInquiryId || undefined,

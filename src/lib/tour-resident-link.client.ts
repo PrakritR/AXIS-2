@@ -31,6 +31,7 @@ export async function linkBookedToursToSignedInResident(
 /** Add resident access when missing, then land in the resident portal. */
 export async function ensureSignedInResidentPortal(
   redirectTo: string,
+  options?: { contactEmail?: string; phone?: string },
 ): Promise<{ ok: true; redirectTo: string } | { ok: false; error?: string }> {
   const next = redirectTo.trim().startsWith("/") ? redirectTo.trim() : "/resident/dashboard";
   try {
@@ -38,7 +39,11 @@ export async function ensureSignedInResidentPortal(
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ redirectTo: next }),
+      body: JSON.stringify({
+        redirectTo: next,
+        ...(options?.contactEmail ? { contactEmail: options.contactEmail } : {}),
+        ...(options?.phone ? { phone: options.phone } : {}),
+      }),
     });
     const data = (await res.json().catch(() => ({}))) as { redirectTo?: string; error?: string };
     if (!res.ok) return { ok: false, error: data.error };

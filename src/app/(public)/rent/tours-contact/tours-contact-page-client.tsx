@@ -32,6 +32,9 @@ import {
   TOUR_ROOM_UNDECIDED_LABEL,
 } from "@/components/marketing/tour-schedule-flow";
 import {
+  ensureSignedInResidentPortal,
+} from "@/lib/tour-resident-link.client";
+import {
   ProspectGuestAccountGate,
   ProspectResidentPortalMessagePrompt,
   ProspectSignedInResidentGate,
@@ -286,6 +289,7 @@ function MessageFlow({
   signedInNonResident?: boolean;
 }) {
   const { showToast } = useAppUi();
+  const router = useRouter();
   const [submitted, setSubmitted] = useState(false);
   const [submittedContact, setSubmittedContact] = useState<{
     name: string;
@@ -304,6 +308,7 @@ function MessageFlow({
   const [message, setMessage] = useState("");
   const [smsConsent, setSmsConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const [linkingSignedInAccount, setLinkingSignedInAccount] = useState(false);
   const isOther = topic === "Other";
 
   const messageGateKey = prospectGateKey("message", propertyId);
@@ -385,6 +390,39 @@ function MessageFlow({
     }
   };
 
+  useEffect(() => {
+    if (!submitted || !submittedContact || !signedInUserId || linkingSignedInAccount) return;
+
+    const communicationReturn = prospectPortalReturnPath("message", { propertyId });
+    setLinkingSignedInAccount(true);
+
+    void (async () => {
+      if (hasResidentRole) {
+        router.replace(communicationReturn);
+        return;
+      }
+      const ensured = await ensureSignedInResidentPortal(communicationReturn, {
+        contactEmail: submittedContact.email,
+        phone: submittedContact.phone || undefined,
+      });
+      if (ensured.ok) {
+        router.replace(ensured.redirectTo);
+        return;
+      }
+      showToast(ensured.error ?? "Could not open Communication.");
+      setLinkingSignedInAccount(false);
+    })();
+  }, [
+    submitted,
+    submittedContact,
+    signedInUserId,
+    hasResidentRole,
+    linkingSignedInAccount,
+    propertyId,
+    router,
+    showToast,
+  ]);
+
   if (submitted && submittedContact) {
     const communicationReturn = prospectPortalReturnPath("message", { propertyId });
     const createAccountHref = residentCreateAccountHref(communicationReturn, {
@@ -393,7 +431,26 @@ function MessageFlow({
       phone: submittedContact.phone || undefined,
       handoff: "message",
     });
-    const signInHref = residentSignInHref(communicationReturn);
+    const signInHref = residentSignInHref(communicationReturn, {
+      email: submittedContact.email,
+      fullName: submittedContact.name,
+      phone: submittedContact.phone || undefined,
+      handoff: "message",
+    });
+
+    if (signedInUserId) {
+      return (
+        <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
+          <ProspectPublicSuccessBanner eyebrow="Message sent" title="Your message is in">
+            <p>
+              We sent your message to the property manager{propertyTitle ? ` about ${propertyTitle}` : ""}. Opening
+              Communication…
+            </p>
+            <p className="font-medium">Topic: {submittedContact.topic}</p>
+          </ProspectPublicSuccessBanner>
+        </div>
+      );
+    }
 
     return (
       <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
@@ -434,25 +491,6 @@ function MessageFlow({
           />
         )}
 
-        <div>
-          <button
-            type="button"
-            onClick={() => {
-              setSubmitted(false);
-              setSubmittedContact(null);
-              setTopic("");
-              setOtherTopicDetail("");
-              setName("");
-              setEmail("");
-              setPhone("");
-              setMessage("");
-              setSmsConsent(false);
-            }}
-            className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
-          >
-            Send another message
-          </button>
-        </div>
       </div>
     );
   }

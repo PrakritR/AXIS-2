@@ -4,8 +4,12 @@
  */
 import type { SupabaseClient } from "@supabase/supabase-js";
 import { INQUIRIES_RECORD_ID } from "@/lib/tour-inquiry.server";
+import { inboxThreadSortMs, parseInboxStampMs } from "@/lib/portal-inbox-storage";
+import { propertyManagerConversationThreadId } from "@/lib/property-manager-inbox-thread.server";
+import { normalizeE164 } from "@/lib/twilio";
 
 const RESIDENT_INBOX_SCOPE = "axis_portal_inbox_resident_v1";
+const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
 
 type Db = SupabaseClient;
 
@@ -244,6 +248,267 @@ export async function attachInboxThreadsToResident(db: Db, userId: string, email
     .from("portal_inbox_thread_records")
     .update({ owner_user_id: userId, updated_at: new Date().toISOString() })
     .in("id", ids);
+}
+
+type InboxThreadMessage = {
+  id: string;
+  from: string;
+  body: string;
+  at: string;
+  outbound?: boolean;
+  channel?: string;
+};
+
+function threadMessages(rowData: Record<string, unknown> | null): InboxThreadMessage[] {
+  if (!Array.isArray(rowData?.messages)) return [];
+  return rowData.messages.filter(
+    (item): item is InboxThreadMessage =>
+      Boolean(item) && typeof item === "object" && typeof (item as InboxThreadMessage).id === "string",
+  );
+}
+
+function messageSortKey(message: InboxThreadMessage, threadId: string): number {
+  return parseInboxStampMs(message.at) ?? inboxThreadSortMs(threadId, message.at);
+}
+
+function mergeThreadMessages(
+  primary: Record<string, unknown>,
+  secondary: Record<string, unknown>,
+  primaryId: string,
+  secondaryId: string,
+): InboxThreadMessage[] {
+  const seen = new Set<string>();
+  const merged: InboxThreadMessage[] = [];
+  for (const message of [...threadMessages(primary), ...threadMessages(secondary)]) {
+    if (seen.has(message.id)) continue;
+    seen.add(message.id);
+    merged.push(message);
+  }
+  merged.sort(
+    (a, b) => messageSortKey(a, primaryId) - messageSortKey(b, secondaryId) || a.id.localeCompare(b.id),
+  );
+  return merged;
+}
+
+function latestThreadActivity(rowData: Record<string, unknown>, messages: InboxThreadMessage[]): string {
+  const latestMessage = messages[messages.length - 1];
+  if (latestMessage?.at) return latestMessage.at;
+  const time = typeof rowData.time === "string" ? rowData.time : "";
+  return time;
+}
+
+async function mergeInboxThreadRecords(
+  db: Db,
+  input: {
+    keepId: string;
+    removeId: string;
+    scope: string;
+    participantEmail: string;
+    ownerUserId?: string | null;
+  },
+): Promise<void> {
+  if (input.keepId === input.removeId) return;
+
+  const [{ data: keepRow }, { data: removeRow }] = await Promise.all([
+    db.from("portal_inbox_thread_records").select("id, row_data, owner_user_id").eq("id", input.keepId).maybeSingle(),
+    db.from("portal_inbox_thread_records").select("id, row_data").eq("id", input.removeId).maybeSingle(),
+  ]);
+
+  if (!removeRow?.row_data) return;
+
+  const keepData = asObject(keepRow?.row_data) ?? {};
+  const removeData = asObject(removeRow.row_data) ?? {};
+  const messages = mergeThreadMessages(keepData, removeData, input.keepId, input.removeId);
+  const activityTime = latestThreadActivity(
+    messages.length ? { time: messages[messages.length - 1]?.at } : keepData,
+    messages,
+  );
+  const previewSource =
+    (typeof keepData.preview === "string" && keepData.preview.trim()) ||
+    (typeof removeData.preview === "string" && removeData.preview.trim()) ||
+    messages[messages.length - 1]?.body?.slice(0, 100).replace(/\n/g, " ") ||
+    "";
+
+  await db.from("portal_inbox_thread_records").upsert(
+    {
+      id: input.keepId,
+      scope: input.scope,
+      owner_user_id:
+        input.ownerUserId ??
+        (keepRow as { owner_user_id?: string | null } | null)?.owner_user_id ??
+        null,
+      participant_email: input.participantEmail,
+      thread_type: "portal_message",
+      row_data: {
+        ...removeData,
+        ...keepData,
+        id: input.keepId,
+        time: activityTime || keepData.time || removeData.time,
+        preview: previewSource,
+        unread: Boolean(keepData.unread) || Boolean(removeData.unread),
+        ...(messages.length ? { messages } : {}),
+      },
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "id" },
+  );
+
+  await db.from("portal_inbox_thread_records").delete().eq("id", input.removeId);
+}
+
+async function mergePropertyManagerThreadPair(
+  db: Db,
+  input: {
+    userId: string;
+    contactEmail: string;
+    authEmail: string;
+    managerUserId: string;
+    propertyId: string;
+  },
+): Promise<void> {
+  const canonicalId = propertyManagerConversationThreadId({
+    residentEmail: input.contactEmail,
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+  });
+  const alternateId = propertyManagerConversationThreadId({
+    residentEmail: input.authEmail,
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+  });
+  if (canonicalId === alternateId) return;
+
+  for (const scope of [RESIDENT_INBOX_SCOPE, MANAGER_INBOX_SCOPE] as const) {
+    const ownerUserId = scope === RESIDENT_INBOX_SCOPE ? input.userId : input.managerUserId;
+    const participantEmail = input.contactEmail;
+
+    const [{ data: canonical }, { data: alternate }] = await Promise.all([
+      db.from("portal_inbox_thread_records").select("id").eq("id", canonicalId).eq("scope", scope).maybeSingle(),
+      db.from("portal_inbox_thread_records").select("id").eq("id", alternateId).eq("scope", scope).maybeSingle(),
+    ]);
+
+    if (!alternate) continue;
+
+    if (!canonical) {
+      const { data: alternateRow } = await db
+        .from("portal_inbox_thread_records")
+        .select("row_data, owner_user_id, thread_type")
+        .eq("id", alternateId)
+        .maybeSingle();
+      if (!alternateRow?.row_data) continue;
+      await db.from("portal_inbox_thread_records").upsert(
+        {
+          id: canonicalId,
+          scope,
+          owner_user_id: ownerUserId,
+          participant_email: participantEmail,
+          thread_type: alternateRow.thread_type ?? "portal_message",
+          row_data: { ...(asObject(alternateRow.row_data) ?? {}), id: canonicalId, email: participantEmail },
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
+      await db.from("portal_inbox_thread_records").delete().eq("id", alternateId);
+      continue;
+    }
+
+    await mergeInboxThreadRecords(db, {
+      keepId: canonicalId,
+      removeId: alternateId,
+      scope,
+      participantEmail,
+      ownerUserId,
+    });
+  }
+}
+
+/** Collect property-scoped thread pairs that may exist under two prospect emails. */
+async function propertyManagerPairsForEmails(
+  db: Db,
+  emails: string[],
+): Promise<Array<{ managerUserId: string; propertyId: string }>> {
+  const pairs = new Map<string, { managerUserId: string; propertyId: string }>();
+  for (const email of emails) {
+    const { data } = await db
+      .from("portal_inbox_thread_records")
+      .select("row_data")
+      .eq("participant_email", email)
+      .in("scope", [RESIDENT_INBOX_SCOPE, MANAGER_INBOX_SCOPE])
+      .limit(200);
+    for (const row of data ?? []) {
+      const rowData = asObject(row.row_data);
+      const propertyId = textField(rowData, "propertyId");
+      const managerUserId = textField(rowData, "managerUserId");
+      if (!propertyId || !managerUserId) continue;
+      pairs.set(`${managerUserId}\0${propertyId}`, { managerUserId, propertyId });
+    }
+  }
+  return [...pairs.values()];
+}
+
+async function mergeProspectInboxThreadsAcrossEmails(
+  db: Db,
+  input: { userId: string; contactEmail: string; authEmail: string },
+): Promise<void> {
+  const pairs = await propertyManagerPairsForEmails(db, [input.contactEmail, input.authEmail]);
+  for (const pair of pairs) {
+    await mergePropertyManagerThreadPair(db, { ...pair, ...input });
+  }
+}
+
+/** Keep tour/message contact details on the profile for outbound Communication identity. */
+export async function applyProspectMessagingContactToProfile(
+  db: Db,
+  input: { userId: string; contactEmail: string; phone?: string | null },
+): Promise<void> {
+  const contactEmail = normalizeEmail(input.contactEmail);
+  if (!contactEmail.includes("@")) return;
+
+  const phone = input.phone?.trim() ? normalizeE164(input.phone.trim()) : null;
+  const { data: profile } = await db.from("profiles").select("email, phone").eq("id", input.userId).maybeSingle();
+  const patch: Record<string, string | null> = {};
+  if ((profile?.email as string | undefined)?.trim().toLowerCase() !== contactEmail) {
+    patch.email = contactEmail;
+  }
+  if (phone && (profile?.phone as string | undefined)?.trim() !== phone) {
+    patch.phone = phone;
+  }
+  if (!Object.keys(patch).length) return;
+  await db.from("profiles").update(patch).eq("id", input.userId);
+}
+
+/**
+ * Link pre-account inbox threads to a resident and merge property conversations
+ * that were split across the prospect form email and the signed-in auth email.
+ */
+export async function reconcileProspectInboxThreadsForResident(
+  db: Db,
+  params: {
+    userId: string;
+    contactEmail: string;
+    authEmail?: string | null;
+    phone?: string | null;
+  },
+): Promise<void> {
+  const contact = normalizeEmail(params.contactEmail);
+  const auth = normalizeEmail(params.authEmail);
+  if (!contact.includes("@")) return;
+
+  await attachInboxThreadsToResident(db, params.userId, contact);
+  if (auth && auth !== contact) {
+    await attachInboxThreadsToResident(db, params.userId, auth);
+    await mergeProspectInboxThreadsAcrossEmails(db, {
+      userId: params.userId,
+      contactEmail: contact,
+      authEmail: auth,
+    });
+  }
+
+  await applyProspectMessagingContactToProfile(db, {
+    userId: params.userId,
+    contactEmail: contact,
+    phone: params.phone,
+  });
 }
 
 export type ResidentTourView = {

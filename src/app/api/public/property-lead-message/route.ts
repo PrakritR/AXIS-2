@@ -2,8 +2,10 @@ import { NextResponse } from "next/server";
 import { notifyProspectPropertyMessageHandoff } from "@/lib/property-lead-prospect-handoff.server";
 import { notifyManagerPropertyLeadMessage } from "@/lib/property-lead-notification.server";
 import { recordResidentProspectInboxMessage } from "@/lib/tour-notification-delivery.server";
+import { reconcileProspectInboxThreadsForResident } from "@/lib/tour-resident-link.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { recordOptIn } from "@/lib/sms-consent";
+import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
@@ -118,6 +120,25 @@ export async function POST(req: Request) {
       propertyId,
       propertyTitle,
     });
+
+    const authClient = await createSupabaseServerClient();
+    const {
+      data: { user: signedInUser },
+    } = await authClient.auth.getUser();
+    if (signedInUser?.id) {
+      const { data: signedInProfile } = await db
+        .from("profiles")
+        .select("email")
+        .eq("id", signedInUser.id)
+        .maybeSingle();
+      const authEmail = (signedInProfile?.email as string | undefined)?.trim().toLowerCase() || signedInUser.email?.trim().toLowerCase() || "";
+      await reconcileProspectInboxThreadsForResident(db, {
+        userId: signedInUser.id,
+        contactEmail: email,
+        authEmail: authEmail && authEmail !== email ? authEmail : undefined,
+        phone: phone || undefined,
+      }).catch(() => undefined);
+    }
 
     void notifyProspectPropertyMessageHandoff({
       name,
