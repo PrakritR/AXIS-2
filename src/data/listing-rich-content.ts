@@ -65,6 +65,8 @@ export type ListingFloorCard = {
 export type ListingBathroomModal = {
   eyebrow: string;
   setupCard: string;
+  /** Bedrooms that use this bathroom — rendered as a list in the detail modal. */
+  usedByRoomNames: string[];
   includedTags: string[];
   /** Placeholder “photos” for the gallery strip (no separate video). */
   photoCaptions: string[];
@@ -76,6 +78,8 @@ export type ListingBathroomRow = {
   id: string;
   name: string;
   detail: string;
+  /** Short “used by” line for browser cards (room names). */
+  usedByLabel: string;
   shower: boolean;
   toilet: boolean;
   bathtub: boolean;
@@ -266,13 +270,15 @@ const defaultBathrooms: ListingBathroomRow[] = [
     id: "b1",
     name: "Full bath (hall)",
     detail: "Between Room 1 and stairs",
+    usedByLabel: "Room 1, Room 2",
     shower: true,
     toilet: true,
     bathtub: true,
-    availability: "Available now",
+    availability: "2 rooms",
     modal: {
-      eyebrow: "First floor",
+      eyebrow: "Bathroom · First floor",
       setupCard: "Tub · single vanity · shared with 1st & 2nd floor",
+      usedByRoomNames: ["Room 1", "Room 2"],
       includedTags: ["Shower", "Toilet", "Bathtub", "Vanity", "Exhaust fan"],
       photoCaptions: ["Vanity & mirror", "Tub & shower combo", "Tile detail"],
     },
@@ -281,13 +287,15 @@ const defaultBathrooms: ListingBathroomRow[] = [
     id: "b2",
     name: "Three-quarter bath",
     detail: "Second floor landing",
+    usedByLabel: "Room 4, Room 5",
     shower: true,
     toilet: true,
     bathtub: false,
-    availability: "Available now",
+    availability: "2 rooms",
     modal: {
-      eyebrow: "Second floor",
+      eyebrow: "Bathroom · Second floor",
       setupCard: "Walk-in shower · vanity",
+      usedByRoomNames: ["Room 4", "Room 5"],
       includedTags: ["Shower", "Toilet", "Vanity", "Heated floor"],
       photoCaptions: ["Walk-in shower", "Vanity"],
     },
@@ -296,13 +304,15 @@ const defaultBathrooms: ListingBathroomRow[] = [
     id: "b3",
     name: "Powder room",
     detail: "Main level by kitchen",
+    usedByLabel: "All bedrooms",
     shower: false,
     toilet: true,
     bathtub: false,
     availability: "Common area",
     modal: {
-      eyebrow: "Main floor",
+      eyebrow: "Bathroom · Main floor",
       setupCard: "Toilet · sink",
+      usedByRoomNames: ["Room 1", "Room 2", "Room 4", "Room 5"],
       includedTags: ["Toilet", "Sink", "Mirror"],
       photoCaptions: ["Powder room overview"],
     },

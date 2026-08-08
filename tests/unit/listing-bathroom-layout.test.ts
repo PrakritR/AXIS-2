@@ -29,9 +29,9 @@ describe("listing bathroom layout copy", () => {
     ];
 
     const room = sub.rooms[0]!;
-    expect(roomBathroomModalLabel(room, sub)).toBe("En suite");
-    expect(roomBathroomSetupLine(room, sub)).toContain("private bathroom");
-    expect(describeRoomBathroomSituation(room.id, sub)).toContain("En suite");
+    expect(roomBathroomModalLabel(room, sub)).toBe("Suite bath");
+    expect(roomBathroomSetupLine(room, sub)).toContain("en suite");
+    expect(describeRoomBathroomSituation(room.id, sub)).toContain("Suite bath");
   });
 
   it("labels a shared bathroom with roommate names in the detail line", () => {
@@ -56,7 +56,7 @@ describe("listing bathroom layout copy", () => {
     ];
 
     const room = sub.rooms[0]!;
-    expect(roomBathroomModalLabel(room, sub)).toBe("Shared bathroom");
+    expect(roomBathroomModalLabel(room, sub)).toBe("Hall bath");
     expect(roomBathroomSetupLine(room, sub)).toContain("Room B");
     expect(describeRoomBathroomSituation(room.id, sub)).toContain("shared with Room B");
   });

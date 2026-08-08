@@ -150,6 +150,10 @@ function availabilityLabel(room: ListingRoomRow): string {
 }
 
 function bathroomHintFromRoom(room: ListingRoomRow): string {
+  const label = room.modal.bathroomShortLabel?.trim();
+  const detail = room.modal.bathroomDetailLine?.trim();
+  if (label && detail) return `${label} · ${detail}`;
+  if (label) return label;
   const blob = `${room.modal.roomNotes ?? room.detail} ${room.modal.setupLine} ${(room.modal.roomAmenityLabels ?? []).join(" ")}`.toLowerCase();
   const n = room.bathroomShareCount;
   if (typeof n === "number" && n === 1) return "Private bath";

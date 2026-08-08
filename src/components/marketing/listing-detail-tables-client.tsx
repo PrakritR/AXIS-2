@@ -599,10 +599,12 @@ export function ListingDetailModal({
                           ),
                       },
                       {
-                        label: "Bathroom",
+                        label: "Your bathroom",
                         value: (
                           <div className="space-y-1">
-                            <p>{state.room.modal.bathroomShortLabel ?? "—"}</p>
+                            <p className="font-semibold text-foreground">
+                              {state.room.modal.bathroomShortLabel ?? "—"}
+                            </p>
                             {state.room.modal.bathroomDetailLine ? (
                               <p className="text-xs font-normal leading-snug text-muted">
                                 {state.room.modal.bathroomDetailLine}
@@ -753,8 +755,18 @@ export function ListingDetailModal({
               placeholderSubtitle="Add a bathroom video in the manager form to replace this placeholder."
               autoPlayMuted
             />
-            <ListingModalSection label="Setup">
-              <p>{state.row.modal.setupCard}</p>
+            <ListingModalSection label="Used by">
+              {state.row.modal.usedByRoomNames.length > 0 ? (
+                <ul className="list-disc space-y-1 pl-5 text-sm leading-relaxed">
+                  {state.row.modal.usedByRoomNames.map((roomName) => (
+                    <li key={roomName}>{roomName}</li>
+                  ))}
+                </ul>
+              ) : state.row.modal.setupCard ? (
+                <p>{state.row.modal.setupCard}</p>
+              ) : (
+                <p className="text-muted">Room assignments not listed yet.</p>
+              )}
             </ListingModalSection>
             <ListingModalSection label="Info">
               <ListingModalTags tags={state.row.modal.includedTags} />

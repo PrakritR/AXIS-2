@@ -16,6 +16,8 @@ import { parseMoneyAmount } from "@/lib/parse-money";
 import { parseMonthlyRent } from "@/lib/listings-search";
 import {
   bathroomShareCountForRoom,
+  bathroomUsedByListingLabel,
+  bathroomAssignedRoomNames,
   describeRoomBathroomSituation,
   listingHasWholeHouseBath,
   roomBathroomModalLabel,
@@ -248,17 +250,6 @@ function roomModalIncludedTags(room: ManagerRoomSubmission, sub: ManagerListingS
   }
 
   return [...new Set(tags)].slice(0, 12);
-}
-
-function bathroomUsedByLabel(b: ManagerBathroomSubmission, sub: ManagerListingSubmissionV1): string {
-  if (b.allResidents) {
-    const named = sub.rooms.filter((r) => r.name.trim()).map((r) => r.name.trim());
-    return named.length ? `All listed bedrooms (${named.join(", ")})` : "All listed bedrooms";
-  }
-  const names = (b.assignedRoomIds ?? [])
-    .map((id) => sub.rooms.find((r) => r.id === id)?.name?.trim())
-    .filter(Boolean);
-  return names.length ? names.join(", ") : "";
 }
 
 function buildListingFloorCard(
@@ -852,21 +843,26 @@ export function listingRichFromManagerSubmission(
       if (b.bathtub) tags.push("Bathtub");
       const extra = splitRoomAmenityLines(b.amenitiesText ?? "");
       const mergedTags = [...tags, ...extra];
+      const usedByRoomNames = bathroomAssignedRoomNames(b, sub);
+      const usedByLabel = bathroomUsedByListingLabel(b, sub);
+      const location = b.location.trim();
       return {
         id: b.id,
         name: b.name.trim(),
-        detail: b.location.trim() || "—",
+        detail: location || "—",
+        usedByLabel,
         shower: b.shower,
         toilet: b.toilet,
         bathtub: b.bathtub,
-        availability: b.allResidents ? "All rooms" : b.assignedRoomIds?.length ? "Assigned" : "—",
+        availability: b.allResidents ? "All bedrooms" : usedByRoomNames.length ? `${usedByRoomNames.length} room${usedByRoomNames.length === 1 ? "" : "s"}` : "—",
         modal: {
-          eyebrow: "Bathroom",
-          setupCard: bathroomUsedByLabel(b, sub)
-            ? `Used by: ${bathroomUsedByLabel(b, sub)}`
-            : b.allResidents
-              ? "Marked as a whole-house / hall bathroom for all listed bedrooms."
+          eyebrow: location ? `Bathroom · ${location}` : "Bathroom",
+          setupCard: b.allResidents
+            ? "Marked as a whole-house / hall bathroom for all listed bedrooms."
+            : usedByRoomNames.length
+              ? ""
               : "Select which rooms use this bathroom in the manager form.",
+          usedByRoomNames,
           includedTags: mergedTags.length ? mergedTags : ["Restroom"],
           photoCaptions: ["Photo 1", "Photo 2", "Photo 3"],
           photoUrls: b.photoDataUrls.length ? b.photoDataUrls : undefined,
@@ -881,6 +877,7 @@ export function listingRichFromManagerSubmission(
         id: "b-fallback",
         name: "Bathrooms",
         detail: "No bathrooms listed yet — add them in the listing editor.",
+        usedByLabel: "",
         shower: true,
         toilet: true,
         bathtub: false,
@@ -888,6 +885,7 @@ export function listingRichFromManagerSubmission(
         modal: {
           eyebrow: "Bathroom",
           setupCard: "Add fixture and room assignments in the listing editor.",
+          usedByRoomNames: [],
           includedTags: ["Shower", "Toilet"],
           photoCaptions: ["Placeholder"],
           videoSrc: null,

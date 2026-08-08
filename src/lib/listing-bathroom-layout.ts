@@ -181,6 +181,32 @@ function formatWholeHouseSupplement(sub: ManagerListingSubmissionV1): string {
   return names.length ? ` · Whole-house bath: ${names.join(", ")}` : "";
 }
 
+/** Room names assigned to a bathroom row — for listing cards and modals. */
+export function bathroomAssignedRoomNames(
+  b: ManagerBathroomSubmission,
+  sub: ManagerListingSubmissionV1,
+): string[] {
+  const rooms = listingRooms(sub);
+  if (b.allResidents) {
+    return rooms.map((r) => r.name.trim()).filter(Boolean);
+  }
+  return (b.assignedRoomIds ?? [])
+    .map((id) => rooms.find((r) => r.id === id)?.name?.trim())
+    .filter((name): name is string => Boolean(name));
+}
+
+/** One-line “used by” label for bathroom listing cards. */
+export function bathroomUsedByListingLabel(
+  b: ManagerBathroomSubmission,
+  sub: ManagerListingSubmissionV1,
+): string {
+  const names = bathroomAssignedRoomNames(b, sub);
+  if (b.allResidents) {
+    return names.length ? `All bedrooms (${names.join(", ")})` : "All listed bedrooms";
+  }
+  return names.length ? `Shared by ${names.join(", ")}` : "";
+}
+
 function describeAssignedBathroom(
   roomId: string,
   bath: ManagerBathroomSubmission,
@@ -194,19 +220,20 @@ function describeAssignedBathroom(
   const wholeHouseSuffix = formatWholeHouseSupplement(sub);
 
   if (kind === "ensuite" || ids.length === 1) {
+    if (bathName) {
+      return `${bathName} · en suite · private to this room${wholeHouseSuffix}`;
+    }
     return `En suite · private bathroom attached to this room${wholeHouseSuffix}`;
   }
 
   if (kind === "hall") {
-    const base = bathName
-      ? `Hall bathroom · ${bathName}`
-      : "Hall bathroom · shared bathroom in the hallway";
-    return `${base}${wholeHouseSuffix}`;
+    const base = bathName || "Hall bathroom";
+    return `${base} · hallway access${wholeHouseSuffix}`;
   }
 
-  const sharedLabel = bathName ? `Shared bathroom · ${bathName}` : "Shared bathroom";
+  const head = bathName || "Shared bathroom";
   const roommateClause = others.length ? ` · shared with ${others.join(", ")}` : "";
-  return `${sharedLabel}${roommateClause}${wholeHouseSuffix}`;
+  return `${head}${roommateClause}${wholeHouseSuffix}`;
 }
 
 /** Human-readable bathroom situation for a room modal / listing copy. */

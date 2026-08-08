@@ -29,8 +29,12 @@ export function bathroomMediaEntries(rows: ListingBathroomRow[]): ListingSpaceMe
     id: row.id,
     eyebrow: row.modal.eyebrow,
     title: row.name,
-    metaLine: row.detail,
-    availability: row.availability !== "—" ? row.availability : undefined,
+    metaLine: row.usedByLabel || (row.detail !== "—" ? row.detail : undefined),
+    availability: row.usedByLabel
+      ? undefined
+      : row.availability !== "—"
+        ? row.availability
+        : undefined,
     photoUrls: row.modal.photoUrls,
     videoSrc: row.modal.videoSrc,
     thumbLabel: row.name,
