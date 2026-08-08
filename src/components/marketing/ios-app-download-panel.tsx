@@ -72,11 +72,7 @@ export function MobileAppDownloadPanel({
         data-attr="mobile-app-download-panel"
       >
         <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2 text-primary">
-            <Smartphone className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
-            <p className="text-xs font-bold uppercase tracking-[0.14em]">Mobile app</p>
-          </div>
-          <h2 className="mt-1 text-lg font-semibold text-foreground">Get PropLane on your phone</h2>
+          <h2 className="text-lg font-semibold text-foreground">Get PropLane on your phone</h2>
           <p className="mt-1 text-sm leading-snug text-muted">
             Push alerts, inbox, and camera uploads — same portal in a native shell.
           </p>
@@ -93,16 +89,12 @@ export function MobileAppDownloadPanel({
   }
 
   return (
-    <div className={cn("grid gap-8 lg:grid-cols-[minmax(0,1fr)_280px] lg:items-center", className)}>
+    <div className={cn("grid gap-8 lg:grid-cols-[minmax(0,1fr)_292px] lg:items-start", className)}>
       <div
         className="rounded-2xl border border-border bg-card px-5 py-6 sm:px-8 sm:py-8"
         data-attr="mobile-app-download-panel"
       >
-        <div className="flex items-center gap-2 text-primary">
-          <Smartphone className="h-5 w-5 shrink-0" strokeWidth={2.25} aria-hidden />
-          <p className="text-xs font-bold uppercase tracking-[0.14em]">Mobile app</p>
-        </div>
-        <h2 className="mt-3 text-2xl font-semibold text-foreground">
+        <h2 className="text-2xl font-semibold text-foreground">
           {testFlight ? "Install the PropLane mobile beta" : "Get PropLane on your phone"}
         </h2>
         <p className="mt-2 text-sm leading-relaxed text-muted">

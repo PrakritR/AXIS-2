@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { MobileAppDownloadPanel } from "@/components/marketing/ios-app-download-panel";
-import { MarketingHero, MarketingPageShell, MarketingSection } from "@/components/marketing/marketing-page-shell";
+import { MarketingPageShell, MarketingSection } from "@/components/marketing/marketing-page-shell";
 import Link from "next/link";
 import "@/components/marketing/landing-proplane.css";
 
@@ -13,13 +13,7 @@ export const metadata: Metadata = {
 export default function MobileAppDownloadPage() {
   return (
     <MarketingPageShell>
-      <MarketingHero
-        eyebrow="Mobile app"
-        title="PropLane on your phone"
-        subtitle="The same manager and resident portals you use on the web — with push notifications and a native camera."
-        align="start"
-      />
-      <MarketingSection narrow className="pb-16">
+      <MarketingSection narrow className="pb-16 pt-10 sm:pt-14">
         <MobileAppDownloadPanel />
         <p className="mt-8 text-center text-sm text-[var(--lp-muted-fg)]">
           Already managing properties?{" "}
