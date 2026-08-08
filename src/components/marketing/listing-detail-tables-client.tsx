@@ -27,6 +27,17 @@ import { listingApplyLabel, listingMessageLabel } from "@/lib/listing-prospect-c
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
+import {
+  addMonths,
+  buildMonthDayCells,
+  dateKey,
+  dayIsUnavailable,
+  monthAvailabilityTone,
+  monthToneLabel,
+  resolveAvailabilityMonthRange,
+  startOfLocalDay,
+  type MonthAvailabilityTone,
+} from "@/lib/room-availability-calendar";
 
 const LISTING_TABLE_HEAD =
   "text-[10px] font-semibold uppercase tracking-wide text-muted sm:text-[11px]";
@@ -78,21 +89,6 @@ function DetailsButton({ onClick, className = "" }: { onClick: () => void; class
   );
 }
 
-function startOfLocalDay(d: Date): Date {
-  return new Date(d.getFullYear(), d.getMonth(), d.getDate());
-}
-
-function addMonths(base: Date, months: number): Date {
-  return new Date(base.getFullYear(), base.getMonth() + months, 1);
-}
-
-function dateKey(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
 function formatRangeDate(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
@@ -104,91 +100,95 @@ function rangeSummaryLabel(w: RoomUnavailabilityWindow): string {
   return "Unavailable dates set";
 }
 
-function dayIsUnavailable(day: Date, windows: RoomUnavailabilityWindow[]): boolean {
-  const t = startOfLocalDay(day).getTime();
-  return windows.some((w) => {
-    const start = w.start ? startOfLocalDay(w.start).getTime() : Number.NEGATIVE_INFINITY;
-    const end = w.end ? startOfLocalDay(w.end).getTime() : Number.POSITIVE_INFINITY;
-    return t >= start && t <= end;
-  });
+function monthTonePillClasses(tone: MonthAvailabilityTone): string {
+  switch (tone) {
+    case "available":
+      return "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+    case "unavailable":
+      return "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+    case "mixed":
+      return "portal-badge-pending ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]";
+  }
 }
 
-function MiniAvailabilityCalendar({ windows }: { windows: RoomUnavailabilityWindow[] }) {
-  const today = startOfLocalDay(new Date());
-  const startMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-  const defaultEndMonth = addMonths(startMonth, 11);
-  const maxWindowMonth = windows.reduce((latest, w) => {
-    const d = w.end ?? w.start;
-    if (!d) return latest;
-    const m = new Date(d.getFullYear(), d.getMonth(), 1);
-    return m.getTime() > latest.getTime() ? m : latest;
-  }, startMonth);
-  const endMonth = maxWindowMonth.getTime() > defaultEndMonth.getTime() ? maxWindowMonth : defaultEndMonth;
-  const monthCount =
-    (endMonth.getFullYear() - startMonth.getFullYear()) * 12 + (endMonth.getMonth() - startMonth.getMonth()) + 1;
-  const [monthOffset, setMonthOffset] = useState(0);
-  const windowsKey = windows.map((w) => `${w.start?.toISOString() ?? ""}|${w.end?.toISOString() ?? ""}`).join(",");
-  const [prevWindowsKey, setPrevWindowsKey] = useState(windowsKey);
-  if (windowsKey !== prevWindowsKey) {
-    setPrevWindowsKey(windowsKey);
-    setMonthOffset(0);
-  }
+function availabilityDayClasses(unavailable: boolean, isPast: boolean, isToday: boolean): string {
+  const base = unavailable
+    ? "bg-rose-100 text-rose-950 ring-1 ring-inset ring-rose-300 [html[data-theme=dark]_&]:bg-rose-950/40 [html[data-theme=dark]_&]:text-rose-100 [html[data-theme=dark]_&]:ring-rose-700/60"
+    : "bg-emerald-100 text-emerald-950 ring-1 ring-inset ring-emerald-300 [html[data-theme=dark]_&]:portal-calendar-open-slot";
+  const past = isPast ? "opacity-45" : "";
+  const today = isToday ? "ring-2 ring-primary/50" : "";
+  return `${base} ${past} ${today}`;
+}
 
-  const clampedOffset = Math.min(Math.max(monthOffset, 0), Math.max(monthCount - 1, 0));
-  const monthStart = addMonths(startMonth, clampedOffset);
-  const monthEnd = new Date(monthStart.getFullYear(), monthStart.getMonth() + 1, 0);
-  const daysInMonth = monthEnd.getDate();
-  const leading = monthStart.getDay();
-  const cells: Array<Date | null> = [];
-  for (let i = 0; i < leading; i++) cells.push(null);
-  for (let d = 1; d <= daysInMonth; d++) cells.push(new Date(monthStart.getFullYear(), monthStart.getMonth(), d));
+function MonthAvailabilityMiniCalendar({
+  monthStart,
+  windows,
+  today,
+}: {
+  monthStart: Date;
+  windows: RoomUnavailabilityWindow[];
+  today: Date;
+}) {
+  const tone = monthAvailabilityTone(monthStart, windows, today);
+  const cells = buildMonthDayCells(monthStart);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-2.5 sm:p-3">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <p className="text-xs font-semibold text-foreground">
+          {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+        </p>
+        <span
+          className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${monthTonePillClasses(tone)}`}
+        >
+          {monthToneLabel(tone)}
+        </span>
+      </div>
+      <div className="grid grid-cols-7 gap-0.5 text-center text-[9px] font-semibold uppercase tracking-wide text-muted">
+        {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((label) => (
+          <span key={label}>{label}</span>
+        ))}
+      </div>
+      <div className="mt-0.5 grid grid-cols-7 gap-0.5">
+        {cells.map((cell, idx) => {
+          if (!cell) return <span key={`empty-${idx}`} className="h-6 sm:h-7" />;
+          const unavailable = dayIsUnavailable(cell, windows);
+          const isToday = dateKey(cell) === dateKey(today);
+          const isPast = cell.getTime() < today.getTime();
+          return (
+            <span
+              key={dateKey(cell)}
+              className={`flex h-6 items-center justify-center rounded-md text-[10px] font-medium sm:h-7 sm:text-[11px] ${availabilityDayClasses(unavailable, isPast, isToday)}`}
+            >
+              {cell.getDate()}
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function RoomAvailabilityTimelineCalendar({ windows }: { windows: RoomUnavailabilityWindow[] }) {
+  const today = startOfLocalDay(new Date());
+  const { startMonth, monthCount } = resolveAvailabilityMonthRange(windows);
+  const months = Array.from({ length: monthCount }, (_, index) => addMonths(startMonth, index));
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={clampedOffset <= 0}
-          onClick={() => setMonthOffset((v) => Math.max(v - 1, 0))}
-        >
-          Previous month
-        </button>
-        <p className="text-xs font-semibold text-muted">
-          {monthStart.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-        </p>
-        <button
-          type="button"
-          className="rounded-full border border-border bg-card px-3 py-1 text-xs font-semibold text-muted disabled:cursor-not-allowed disabled:opacity-45"
-          disabled={clampedOffset >= monthCount - 1}
-          onClick={() => setMonthOffset((v) => Math.min(v + 1, monthCount - 1))}
-        >
-          Next month
-        </button>
-      </div>
-      <div className="rounded-xl border border-border bg-card p-3">
-        <div className="mt-2 grid grid-cols-7 gap-1 text-center text-[10px] font-semibold uppercase tracking-wide text-muted">
-          <span>Su</span><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span>
-        </div>
-        <div className="mt-1 grid grid-cols-7 gap-1">
-          {cells.map((cell, idx) => {
-            if (!cell) return <span key={`empty-${idx}`} className="h-7" />;
-            const unavailable = dayIsUnavailable(cell, windows);
-            const isToday = dateKey(cell) === dateKey(today);
-            return (
-              <span
-                key={dateKey(cell)}
-                className={`flex h-7 items-center justify-center rounded-md text-[11px] font-medium ${
-                  unavailable
-                    ? "portal-badge-danger ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                    : "portal-badge-success ring-1 ring-[color-mix(in_srgb,currentColor_25%,transparent)]"
-                } ${isToday ? "ring-2 ring-primary/40" : ""}`}
-              >
-                {cell.getDate()}
-              </span>
-            );
-          })}
-        </div>
+      <p className="text-xs text-muted">
+        Green dates are open and red dates are unavailable. Each month summary shows whether the rest of that month is
+        fully open, fully blocked, or mixed.
+      </p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {months.map((monthStart) => (
+          <MonthAvailabilityMiniCalendar
+            key={`${monthStart.getFullYear()}-${monthStart.getMonth()}`}
+            monthStart={monthStart}
+            windows={windows}
+            today={today}
+          />
+        ))}
       </div>
     </div>
   );
@@ -631,30 +631,27 @@ export function ListingDetailModal({
                   />
                   <ListingModalSection label="Availability timeline">
                     {roomUnavailableWindows.length > 0 ? (
-                      <>
-                        <div className="space-y-2">
-                          {roomUnavailableWindows.map((w) => (
-                            <div
-                              key={w.id}
-                              className="flex items-start gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-muted"
-                            >
-                              <span
-                                className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-sky-500"}`}
-                              />
-                              <span>{rangeSummaryLabel(w)}</span>
-                            </div>
-                          ))}
-                        </div>
-                        <p className="mt-3 text-xs text-muted">Green dates are open and red dates are unavailable for this room.</p>
-                        <div className="mt-3">
-                          <MiniAvailabilityCalendar windows={roomUnavailableWindows} />
-                        </div>
-                      </>
+                      <div className="space-y-2">
+                        {roomUnavailableWindows.map((w) => (
+                          <div
+                            key={w.id}
+                            className="flex items-start gap-2 rounded-lg border border-border bg-accent/30 px-3 py-2 text-xs text-muted"
+                          >
+                            <span
+                              className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${w.source === "resident" ? "bg-rose-500" : "bg-sky-500"}`}
+                            />
+                            <span>{rangeSummaryLabel(w)}</span>
+                          </div>
+                        ))}
+                      </div>
                     ) : (
-                      <p className="text-emerald-700 [html[data-theme=dark]_&]:text-emerald-300">
+                      <p className="text-sm text-emerald-800 [html[data-theme=dark]_&]:text-emerald-300">
                         No blocked ranges or resident occupancy currently set for this room.
                       </p>
                     )}
+                    <div className={roomUnavailableWindows.length > 0 ? "mt-4" : "mt-3"}>
+                      <RoomAvailabilityTimelineCalendar windows={roomUnavailableWindows} />
+                    </div>
                   </ListingModalSection>
                   {(() => {
                     const bathTagPattern = /^(private|shared|house hall)\s+bath$/i;

@@ -9,6 +9,15 @@ vi.mock("@/lib/rental-application/data", async (importOriginal) => {
   return { ...actual, getRoomUnavailabilityWindows: () => [] };
 });
 
+vi.mock("@/lib/supabase/browser", () => ({
+  createSupabaseBrowserClient: () => ({
+    auth: {
+      getUser: async () => ({ data: { user: null } }),
+      onAuthStateChange: () => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    },
+  }),
+}));
+
 afterEach(cleanup);
 
 function roomRow(overrides: Partial<ListingRoomRow> = {}): ListingRoomRow {
@@ -99,5 +108,12 @@ describe("room detail modal — rent", () => {
   it("keeps an entire-home room's descriptive label instead of reporting it as unset", () => {
     renderRoom(roomRow({ price: "Included", priceHeadlineAmount: undefined }));
     expect(within(statCard("Rent")).getByText("Included")).toBeTruthy();
+  });
+
+  it("renders a multi-month availability calendar in the room modal", () => {
+    renderRoom(roomRow());
+    expect(screen.getByText("Availability timeline")).toBeTruthy();
+    expect(screen.getByText(/Green dates are open and red dates are unavailable/)).toBeTruthy();
+    expect(screen.getAllByText("Open").length).toBeGreaterThan(0);
   });
 });
