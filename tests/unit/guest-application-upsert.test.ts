@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { DemoApplicantRow } from "@/data/demo-portal";
 import { prepareGuestApplicationUpsert } from "@/lib/auth/guest-application-upsert";
-import { isResidentSetupTokenValid } from "@/lib/auth/resident-setup-token";
+import { attachResidentSetupToken, isResidentSetupTokenValid } from "@/lib/auth/resident-setup-token";
 
 function baseRow(overrides: Partial<DemoApplicantRow> = {}): DemoApplicantRow {
   return {
@@ -108,5 +108,19 @@ describe("prepareGuestApplicationUpsert", () => {
       existing: baseRow({ bucket: "approved" }),
     });
     expect(result).toMatchObject({ ok: false, status: 403 });
+  });
+
+  it("preserves an existing setup token when the client still holds it", async () => {
+    const withToken = attachResidentSetupToken(baseRow());
+    const result = await prepareGuestApplicationUpsert(makeDb() as never, {
+      row: baseRow({ fullLegalName: "Updated" } as never),
+      existing: withToken.row,
+      clientSetupToken: withToken.token,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.setupToken).toBe(withToken.token);
+    expect(result.row.setupTokenHash).toBe(withToken.row.setupTokenHash);
+    expect(isResidentSetupTokenValid(result.row, withToken.token)).toBe(true);
   });
 });

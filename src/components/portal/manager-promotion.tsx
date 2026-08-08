@@ -107,19 +107,12 @@ import {
   syncPropertyPipelineFromServer,
 } from "@/lib/demo-property-pipeline";
 import { AGENT_PENDING_ACTIONS_EVENT } from "@/lib/axis-assistant/pending-actions-events";
-import { isSystemOwnedPromotionEntryId } from "@/lib/promotion-default-sync";
 
 function promotionEntryId(asset: PromotionAsset): string | null {
   if (asset.kind === "flyer") return asset.flyerEntry?.id ?? null;
   if (asset.kind === "text") return asset.textEntry?.id ?? null;
   if (asset.kind === "upload") return asset.uploadEntry?.id ?? null;
   return null;
-}
-
-function canDeletePromotionAsset(asset: PromotionAsset): boolean {
-  const entryId = promotionEntryId(asset);
-  if (!entryId) return false;
-  return !isSystemOwnedPromotionEntryId(entryId);
 }
 
 function flyerEntryToDraft(
@@ -653,11 +646,6 @@ export function ManagerPromotion({
     return stored.trim() || promotionAssetListTitle(detailAsset, indexWithinKind);
   }, [detailAsset, assets]);
 
-  const editingFlyerAsset =
-    editingRowId && editingEntryId
-      ? assets.find((a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId) ?? null
-      : null;
-
   function deleteAsset(asset: PromotionAsset) {
     if (asset.kind === "flyer" && asset.flyerEntry) {
       const next = removeFlyerEntryFromRow(asset.row, asset.flyerEntry.id);
@@ -677,10 +665,6 @@ export function ManagerPromotion({
   }
 
   function handleDeleteAsset(asset: PromotionAsset) {
-    if (!canDeletePromotionAsset(asset)) {
-      showToast("Default flyer and listing blurb cannot be removed.");
-      return;
-    }
     const title = asset.flyerEntry?.title ?? asset.textEntry?.title ?? asset.uploadEntry?.title ?? "Promotion";
     if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     if (previewAssetId === asset.id) closePreview();
@@ -690,8 +674,12 @@ export function ManagerPromotion({
   }
 
   function handleDeleteFromFlyerModal() {
-    if (!editingFlyerAsset) return;
-    handleDeleteAsset(editingFlyerAsset);
+    if (!editingRowId || !editingEntryId) return;
+    const asset = assets.find(
+      (a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId,
+    );
+    if (!asset) return;
+    handleDeleteAsset(asset);
   }
 
   const promotionModals = (

@@ -5,6 +5,7 @@ import {
   isListingFeeAmountFilled,
   type ManagerRoomSubmission,
 } from "@/lib/manager-listing-submission";
+import { removedStandardListingFeeRowSet } from "@/lib/listing-fees";
 import { shortTermNightlyRate } from "@/lib/short-term-stay-pricing";
 
 function listingRoomHasRent(room: ManagerRoomSubmission): boolean {
@@ -52,7 +53,7 @@ export const LISTING_STANDARD_FEE_ROWS: readonly {
   {
     id: "applicationFee",
     label: "Application fee",
-    stField: "applicationFee",
+    stField: "shortTermApplicationFee",
     ltField: "applicationFee",
   },
   {
@@ -272,8 +273,9 @@ export function validateListingStFeeToggles(
 ): Record<string, string> {
   const errs: Record<string, string> = {};
   if (!hasShortTerm) return errs;
+  const removed = removedStandardListingFeeRowSet(sub);
 
-  if (toggles.rent) {
+  if (toggles.rent && !removed.has("rent")) {
     if (!(shortTermNightlyRate(sub.shortTermDailyCost) > 0)) {
       errs.shortTermDailyCost = "Enter a nightly rate for short-term stays.";
     }
@@ -281,6 +283,7 @@ export function validateListingStFeeToggles(
 
   for (const row of LISTING_STANDARD_FEE_ROWS) {
     if (!row.stField || row.id === "rent") continue;
+    if (removed.has(row.id)) continue;
     if (!toggles[row.id]) continue;
     const raw = String(sub[row.stField] ?? "");
     if (!isListingFeeAmountFilled(raw)) {
@@ -300,8 +303,9 @@ export function validateListingLtFeeToggles(
 ): Record<string, string> {
   const errs: Record<string, string> = {};
   if (!hasLongTerm) return errs;
+  const removed = removedStandardListingFeeRowSet(sub);
 
-  if (toggles.rent) {
+  if (toggles.rent && !removed.has("rent")) {
     if (opts.isEntireHome && !((opts.entireHomeRent ?? 0) > 0)) {
       errs.monthlyRent = "Enter the monthly rent for the entire home.";
     }
@@ -309,6 +313,7 @@ export function validateListingLtFeeToggles(
 
   for (const row of LISTING_STANDARD_FEE_ROWS) {
     if (!row.ltField || row.id === "rent" || row.ltField === "entireHomeMonthlyRent") continue;
+    if (removed.has(row.id)) continue;
     if (!toggles[row.id]) continue;
     const raw = String(sub[row.ltField] ?? "");
     if (!isListingFeeAmountFilled(raw)) {

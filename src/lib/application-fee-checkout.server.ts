@@ -60,6 +60,20 @@ function clampAmountCents(n: number): number {
   return x;
 }
 
+/** Raw per-listing application fee label before manager-default fallback. */
+export function listingApplicationFeeRaw(
+  listing: ManagerListingSubmissionV1 | null | undefined,
+  rentalType?: "standard" | "short_term",
+): string {
+  if (!listing) return "";
+  if (rentalType === "short_term") {
+    const st = String(listing.shortTermApplicationFee ?? "").trim();
+    if (st !== "") return st;
+    return String(listing.applicationFee ?? "").trim();
+  }
+  return String(listing.applicationFee ?? "").trim();
+}
+
 export type ResolvedApplicationFeeProperty = {
   managerUserId: string;
   listing: ManagerListingSubmissionV1 | null;
@@ -79,7 +93,7 @@ export type ResolvedApplicationFeeProperty = {
  */
 export async function resolveApplicationFeeProperty(
   db: SupabaseClient,
-  input: { propertyId: string; managerUserId: string },
+  input: { propertyId: string; managerUserId: string; rentalType?: "standard" | "short_term" },
   opts?: {
     /**
      * A 0 effective fee ("applications are free") is a NORMAL answer for the
@@ -107,7 +121,7 @@ export async function resolveApplicationFeeProperty(
   // "unset" → fall back to the account-wide default; any set value (INCLUDING "0" = free) is
   // charged as-is and must never fall through. See `src/lib/manager-application-settings.ts`.
   const managerSettings = await loadManagerApplicationSettings(db, ownerUserId);
-  const rawListingFee = String(listing?.applicationFee ?? "").trim();
+  const rawListingFee = listingApplicationFeeRaw(listing, input.rentalType);
   const listingFeeCents =
     rawListingFee === "" ? null : clampAmountCents(parseMoneyAmount(rawListingFee) * 100);
   const applicationFeeCents = clampAmountCents(
@@ -171,6 +185,7 @@ export type ApplicationFeeCheckoutInput = {
   residentEmail: string;
   residentName?: string;
   managerUserId: string;
+  rentalType?: "standard" | "short_term";
   /**
    * `embedded` renders the payment form INLINE in the application (the default
    * — the applicant never leaves the wizard); `hosted` redirects to Stripe's

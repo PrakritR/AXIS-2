@@ -23,6 +23,7 @@ import { normalizeUtilitiesPaymentModel } from "@/lib/listing-utilities-payment"
 import type { LeaseUtilityLine } from "@/lib/lease-utilities";
 import { normalizeLeaseUtilities } from "@/lib/lease-utilities";
 import {
+  defaultRemovedStandardListingFeeRowsForNewListing,
   ensureSubmissionListingFees,
   normalizeListingFeeRow,
   resolveListingFees,
@@ -335,6 +336,13 @@ export type ManagerListingSubmissionV1 = {
   /** Short-term month-to-month surcharge (parallel to {@link monthToMonthSurcharge}). */
   shortTermMonthToMonthSurcharge?: string;
   applicationFee: string;
+  /** Short-term application fee when it differs from {@link applicationFee}. */
+  shortTermApplicationFee?: string;
+  /**
+   * Standard fee rows the manager removed from the Pricing table. Persisted so
+   * normalize/sync does not re-materialize them from legacy scalars.
+   */
+  removedStandardListingFeeRows?: string[];
   /**
    * Refundable deposit securing the application; credited toward the security
    * deposit on approval (defaults to $100 when blank). Billed under Payments
@@ -1488,6 +1496,11 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
     shortTermOtherMonthlyFees: typeof sub.shortTermOtherMonthlyFees === "string" ? sub.shortTermOtherMonthlyFees : "",
     shortTermMonthToMonthSurcharge:
       typeof sub.shortTermMonthToMonthSurcharge === "string" ? sub.shortTermMonthToMonthSurcharge : "",
+    shortTermApplicationFee:
+      typeof sub.shortTermApplicationFee === "string" ? sub.shortTermApplicationFee : "",
+    removedStandardListingFeeRows: Array.isArray(sub.removedStandardListingFeeRows)
+      ? sub.removedStandardListingFeeRows.filter((id): id is string => typeof id === "string" && id.trim().length > 0)
+      : [],
     holdingDeposit: typeof sub.holdingDeposit === "string" ? sub.holdingDeposit : "",
     holdingDepositTiming: sub.holdingDepositTiming === "at_application" ? "at_application" : "after_approval",
     monthToMonthSurcharge: typeof sub.monthToMonthSurcharge === "string" ? sub.monthToMonthSurcharge : "",
@@ -1973,14 +1986,17 @@ export function resolveServiceOfferPricing(offer: {
  * back-compat) plus the sensible starting defaults that let the common case publish with
  * minimal typing: a 12-Month long-term lease (the most common term, and one is required to
  * publish) is pre-selected. Everything else already has a good default on the base
- * (holding deposit $100, late fee on, PropLane payments on, auto proration), and the
- * manager-specific fields (address, rent) are the only ones left to type.
+ * (late fee on, PropLane payments on, auto proration), and the manager-specific
+ * fields (address, rent) are the only ones left to type. Other fees start with
+ * only Application fee visible — every other standard row is removed until added.
  */
 export function createNewListingWizardSubmission(): ManagerListingSubmissionV1 {
-  return {
+  return ensureSubmissionListingFees({
     ...createDefaultListingSubmission(),
     allowedLeaseTerms: ["12-Month"],
-  };
+    holdingDeposit: "",
+    removedStandardListingFeeRows: defaultRemovedStandardListingFeeRowsForNewListing(),
+  });
 }
 
 export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
@@ -2010,6 +2026,7 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     shortTermRequirements: "",
     shortTermDailyCost: "",
     shortTermDeposit: "",
+    shortTermApplicationFee: "",
     applicationFee: "",
     holdingDeposit: "$100",
     holdingDepositTiming: "after_approval",

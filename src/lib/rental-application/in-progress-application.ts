@@ -1,4 +1,5 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
+import { formatProplaneIdForDisplay } from "@/lib/manager-id";
 import {
   readManagerApplicationRows,
   replaceManagerApplicationRowInCache,
@@ -150,10 +151,28 @@ export function applicationStartedLabel(row: Pick<DemoApplicantRow, "detail">): 
   return /^(started|submitted|updated)\s/i.test(detail) ? detail : "";
 }
 
-export function inProgressApplicationResumeUrl(origin: string, row: DemoApplicantRow): string {
+export type ApplicationResumeLinkCredentials = {
+  token: string;
+  axisId: string;
+};
+
+export function inProgressApplicationResumeUrl(
+  origin: string,
+  row: DemoApplicantRow,
+  resume?: ApplicationResumeLinkCredentials,
+): string {
   const base = origin.replace(/\/$/, "");
   const pid = row.propertyId?.trim() || row.application?.propertyId?.trim();
-  const path = pid ? `/rent/apply?propertyId=${encodeURIComponent(pid)}` : "/rent/apply";
+  const params = new URLSearchParams();
+  if (pid) params.set("propertyId", pid);
+  const token = resume?.token?.trim();
+  const axisId = resume?.axisId?.trim();
+  if (token && axisId) {
+    params.set("token", token);
+    params.set("proplane_id", formatProplaneIdForDisplay(axisId));
+  }
+  const qs = params.toString();
+  const path = qs ? `/rent/apply?${qs}` : "/rent/apply";
   return `${base}${path}`;
 }
 

@@ -1,10 +1,12 @@
 import { describe, expect, it } from "vitest";
 import type { MockProperty } from "@/data/types";
 import {
+  addDefaultPromotionPreset,
   defaultPromotionFlyerEntryId,
   defaultPromotionTextEntryId,
   ensureDefaultPromotionAssets,
   isSystemOwnedPromotionEntryId,
+  missingPromotionPresets,
 } from "@/lib/promotion-default-sync";
 import { readFlyerEntries } from "@/lib/promotion-flyer";
 import { readPromotionTextEntries } from "@/lib/promotion-text";
@@ -120,6 +122,40 @@ describe("promotion-default-sync", () => {
     });
     expect(second).not.toBeNull();
     expect(readFlyerEntries(second!)[0]?.inputs.images).toEqual([updatedUrl]);
+  });
+
+  it("adds a single preset on demand without creating the other", () => {
+    const flyerOnly = addDefaultPromotionPreset({
+      propertyId: PROPERTY_ID,
+      property: sampleProperty(),
+      managerUserId: "mgr-user-1",
+      preset: "default_flyer",
+    });
+    expect(flyerOnly).not.toBeNull();
+    expect(readFlyerEntries(flyerOnly!)).toHaveLength(1);
+    expect(readPromotionTextEntries(flyerOnly!)).toHaveLength(0);
+
+    const textOnly = addDefaultPromotionPreset({
+      propertyId: PROPERTY_ID,
+      property: sampleProperty(),
+      managerUserId: "mgr-user-1",
+      existingRow: flyerOnly,
+      preset: "default_listing_blurb",
+    });
+    expect(textOnly).not.toBeNull();
+    expect(readFlyerEntries(textOnly!)).toHaveLength(1);
+    expect(readPromotionTextEntries(textOnly!)).toHaveLength(1);
+  });
+
+  it("reports missing presets for the suggestions list", () => {
+    expect(missingPromotionPresets(PROPERTY_ID, null)).toEqual(["default_flyer", "default_listing_blurb"]);
+    const withFlyer = addDefaultPromotionPreset({
+      propertyId: PROPERTY_ID,
+      property: sampleProperty(),
+      managerUserId: "mgr-user-1",
+      preset: "default_flyer",
+    });
+    expect(missingPromotionPresets(PROPERTY_ID, withFlyer)).toEqual(["default_listing_blurb"]);
   });
 
   it("flags system-owned seed entry ids", () => {

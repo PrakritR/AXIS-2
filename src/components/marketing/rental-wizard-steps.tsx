@@ -2340,6 +2340,7 @@ export function RentalWizardStepBody(p: WizardStepsProps) {
               residentEmail={form.email.trim()}
               residentName={form.fullLegalName.trim() || undefined}
               managerUserId={managerUserIdForPay}
+              rentalType={form.rentalType}
               returnPath={applyReturnPath ?? "/rent/apply"}
             />
           ) : (

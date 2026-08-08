@@ -166,9 +166,11 @@ function isFlyerEntry(raw: unknown): raw is FlyerEntry {
 
 /** Read flyer variants from a promotion row, migrating the legacy single `copy`. */
 export function readFlyerEntries(row: ManagerPromotionRow): FlyerEntry[] {
+  // Once `flyerCopies` exists — even as `[]` — the row is on the multi-flyer
+  // model. Never fall back to legacy `copy` here or deleting the last variant
+  // resurrects it on the next sync/render.
   if (Array.isArray(row.flyerCopies)) {
-    const entries = row.flyerCopies.filter(isFlyerEntry);
-    if (entries.length > 0) return entries;
+    return row.flyerCopies.filter(isFlyerEntry);
   }
   if (row.copy) {
     return [

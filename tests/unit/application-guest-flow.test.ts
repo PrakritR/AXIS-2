@@ -48,6 +48,18 @@ describe("in-progress draft sync eligibility", () => {
     expect(inProgressApplicationResumeUrl("https://axis.test", row)).toBe(
       "https://axis.test/rent/apply?propertyId=prop-1",
     );
+    expect(
+      inProgressApplicationResumeUrl("https://axis.test", row, {
+        token: "guest-resume-token",
+        axisId: "PROPLANE-ABC",
+      }),
+    ).toContain("token=guest-resume-token");
+    expect(
+      inProgressApplicationResumeUrl("https://axis.test", row, {
+        token: "guest-resume-token",
+        axisId: "PROPLANE-ABC",
+      }),
+    ).toContain("proplane_id=PROPLANE-ABC");
   });
 });
 

@@ -373,11 +373,9 @@ function emitApplicationSaveStatus(ok: boolean, id: string): void {
 }
 
 /**
- * Guest autosaves return a freshly-rotated resident-setup token for the row.
- * The photo-capture fields use it as their write credential (a guest may only
- * mint photo uploads with the row's current token), so remember the latest one
- * per application id. sessionStorage so an in-tab reload keeps uploads working;
- * it never outlives the tab.
+ * Guest autosaves return the row's resident-setup token for photo uploads and
+ * emailed resume links. When the browser still holds a valid token it is echoed
+ * back unchanged so links in a sent email are not invalidated by later autosaves.
  */
 const APPLICATION_SETUP_TOKEN_STORE_PREFIX = "axis.applicationSetupToken.";
 
@@ -407,11 +405,16 @@ export function getApplicationSetupToken(id: string): string | null {
 
 function mirrorApplicationRowToServer(row: DemoApplicantRow): Promise<void> {
   if (typeof window === "undefined" || isDemoModeActive()) return Promise.resolve();
+  const setupToken = getApplicationSetupToken(row.id);
   return fetch("/api/manager-applications", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     credentials: "include",
-    body: JSON.stringify({ action: "upsert", row }),
+    body: JSON.stringify({
+      action: "upsert",
+      row,
+      ...(setupToken ? { setupToken } : {}),
+    }),
   })
     .then(async (res) => {
       if (res.ok) {
@@ -448,12 +451,17 @@ function flushPendingApplicationRowUpserts() {
   for (const entry of upsertQueues.values()) {
     const pending = entry.latest;
     if (!pending) continue;
+    const setupToken = getApplicationSetupToken(pending.id);
     void fetch("/api/manager-applications", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       credentials: "include",
       keepalive: true,
-      body: JSON.stringify({ action: "upsert", row: pending }),
+      body: JSON.stringify({
+        action: "upsert",
+        row: pending,
+        ...(setupToken ? { setupToken } : {}),
+      }),
     }).catch(() => undefined);
   }
 }

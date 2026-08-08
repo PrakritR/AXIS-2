@@ -95,11 +95,13 @@ import {
 import {
   APPLICATION_SAVE_STATUS_EVENT,
   getApplicationSetupToken,
+  rememberApplicationSetupToken,
   replaceManagerApplicationRowInCache,
   syncManagerApplicationsFromServer,
   syncPublicApprovedApplicationsFromServer,
   upsertApplicationRowToServerAwait,
 } from "@/lib/manager-applications-storage";
+import { residentSetupIdFromUrlParams } from "@/lib/auth/resident-setup-token";
 import { RentalWizardStepBody } from "./rental-wizard-steps";
 import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { ApplicationUnavailableContactManager } from "@/components/marketing/application-unavailable-contact-manager";
@@ -661,7 +663,7 @@ function RentalApplicationWizardInner({
     let cancelled = false;
     let retryTimer: number | undefined;
     const load = () => {
-      void fetchApplicationFeePreview({ propertyId: pid, managerUserId }).then((preview) => {
+      void fetchApplicationFeePreview({ propertyId: pid, managerUserId, rentalType: form.rentalType }).then((preview) => {
         if (cancelled) return;
         if (!preview) {
           // Transient failure — keep the gate closed (fee unknown) and retry
@@ -677,7 +679,7 @@ function RentalApplicationWizardInner({
       cancelled = true;
       if (retryTimer !== undefined) window.clearTimeout(retryTimer);
     };
-  }, [step, form.propertyId, extrasTick]);
+  }, [step, form.propertyId, form.rentalType, extrasTick]);
 
   const propertyOptions = useMemo(() => {
     void extrasTick;
@@ -784,7 +786,11 @@ function RentalApplicationWizardInner({
       void fetch("/api/portal/send-application-started", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: email.trim().toLowerCase(), axisId }),
+        body: JSON.stringify({
+          email: email.trim().toLowerCase(),
+          axisId,
+          setupToken: getApplicationSetupToken(axisId) ?? undefined,
+        }),
       })
         .then((res) => {
           if (!res.ok) return;
@@ -894,6 +900,12 @@ function RentalApplicationWizardInner({
     if (!draftReady || mode !== "public" || isDemoModeActive()) return;
     if (loadRentalWizardDraftAxisId()?.trim()) return; // live draft present — nothing was lost
     const target = wizardTargetFromParam(searchParams);
+    const tokenFromUrl = searchParams.get("token")?.trim();
+    const axisIdFromUrl = residentSetupIdFromUrlParams(searchParams);
+    if (tokenFromUrl && axisIdFromUrl) {
+      rememberApplicationSetupToken(axisIdFromUrl, tokenFromUrl);
+      rememberPublicApplyResumeAxisId(axisIdFromUrl);
+    }
     let cancelled = false;
     void (async () => {
       let hit: DemoApplicantRow | null = null;
@@ -1272,7 +1284,11 @@ function RentalApplicationWizardInner({
       const managerUserIdForFee = prop?.managerUserId?.trim() ?? "";
       const preview =
         managerUserIdForFee && !isDemoModeActive()
-          ? await fetchApplicationFeePreview({ propertyId: pid, managerUserId: managerUserIdForFee })
+          ? await fetchApplicationFeePreview({
+              propertyId: pid,
+              managerUserId: managerUserIdForFee,
+              rentalType: form.rentalType,
+            })
           : null;
       ensurePendingApplicationFeeCharge({
         residentEmail: form.email,
@@ -1452,7 +1468,11 @@ function RentalApplicationWizardInner({
       if (!feeWaivedByCode && !isDemoModeActive() && pid) {
         const managerUserIdForFee = prop?.managerUserId?.trim() ?? "";
         if (managerUserIdForFee) {
-          const preview = await fetchApplicationFeePreview({ propertyId: pid, managerUserId: managerUserIdForFee });
+          const preview = await fetchApplicationFeePreview({
+            propertyId: pid,
+            managerUserId: managerUserIdForFee,
+            rentalType: form.rentalType,
+          });
           if (preview) applicationFeeAmount = preview.applicationFeeCents / 100;
         }
       }
@@ -1644,7 +1664,11 @@ function RentalApplicationWizardInner({
     void (async () => {
       const managerUserIdForFee = getPropertyById(pid)?.managerUserId?.trim() ?? "";
       const feePreview = managerUserIdForFee
-        ? await fetchApplicationFeePreview({ propertyId: pid, managerUserId: managerUserIdForFee })
+        ? await fetchApplicationFeePreview({
+            propertyId: pid,
+            managerUserId: managerUserIdForFee,
+            rentalType: form.rentalType,
+          })
         : null;
       const feeAmountOverride = feePreview ? feePreview.applicationFeeCents / 100 : undefined;
       const res = await fetch("/api/stripe/application-fee-verify", {
@@ -1760,7 +1784,11 @@ function RentalApplicationWizardInner({
         const managerUserIdForFee = prop?.managerUserId?.trim() ?? "";
         let serverFeeCents: number | null = null;
         if (managerUserIdForFee && !form.applicationFeeWaived) {
-          const preview = await fetchApplicationFeePreview({ propertyId: pid, managerUserId: managerUserIdForFee });
+          const preview = await fetchApplicationFeePreview({
+            propertyId: pid,
+            managerUserId: managerUserIdForFee,
+            rentalType: form.rentalType,
+          });
           if (!preview) {
             const msg = "We couldn't confirm the application fee. Check your connection and try again.";
             setApplicationFeeCheckError(msg);
