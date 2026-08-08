@@ -63,7 +63,7 @@ import { MANAGER_PLAN_PORTAL_URL } from "@/lib/portals/manager-plan-path";
 import { RESIDENT_PAYMENTS_LEGACY_TABS } from "@/lib/portals/resident-sections";
 import { getProPortalRenderContext } from "@/lib/portals/pro-nav";
 import { buildPortalWorkspaceModel } from "@/lib/portal-workspace-model";
-import { legacyManagerPortalSectionPath, parseResidentMoveInTab } from "@/lib/portal-detail-routes";
+import { legacyManagerPortalSectionPath } from "@/lib/portal-detail-routes";
 import type { PortalKind } from "@/lib/portal-types";
 import { notFound, redirect } from "next/navigation";
 
@@ -1023,17 +1023,14 @@ export async function renderPortalSection(
 
   if (kind === "resident" && section === "move-in") {
     const moveInEmail = residentCtx?.profile?.email ?? residentCtx?.user?.email ?? null;
-    if (!tabParts?.length) {
-      redirect(`${def.basePath}/move-in/placement`);
+    if (tabParts?.length) {
+      redirect(`${def.basePath}/move-in`);
     }
-    if (tabParts.length > 1) notFound();
-    const moveInTab = parseResidentMoveInTab(tabParts[0]);
     const leaseSigned = moveInEmail ? await loadResidentLeaseSignedStatus(moveInEmail) : false;
     if (!leaseSigned) {
       return (
         <ManagerPortalPageShell title="House details" hideTitleOnMobileNav>
           <ResidentMoveInShell
-            activeTab={moveInTab}
             basePath={def.basePath}
             resolved={null}
             email={moveInEmail?.trim().toLowerCase() ?? ""}
@@ -1043,11 +1040,7 @@ export async function renderPortalSection(
       );
     }
     return (
-      <ResidentMoveInPanel
-        residentEmail={moveInEmail}
-        tab={tabParts[0]}
-        basePath={def.basePath}
-      />
+      <ResidentMoveInPanel residentEmail={moveInEmail} basePath={def.basePath} />
     );
   }
 

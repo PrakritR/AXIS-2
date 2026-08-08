@@ -1,69 +1,43 @@
 "use client";
 
-import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
 import { ResidentMoveInMediaGallery } from "@/components/portal/move-in-media-fields";
 import { PortalDataTableEmpty } from "@/components/portal/portal-data-table";
 import { PORTAL_INLINE_UNLOCK_NOTICE_CLASS } from "@/components/portal/portal-metrics";
-import {
-  RESIDENT_MOVE_IN_TAB_LABELS,
-  RESIDENT_MOVE_IN_TABS,
-  residentMoveInHref,
-  type ResidentMoveInTabId,
-} from "@/lib/portal-detail-routes";
 import type { ResidentMoveInResolved } from "@/lib/resident-move-in-resolve";
 
-function availableTabs(resolved: ResidentMoveInResolved): ResidentMoveInTabId[] {
-  const tabs: ResidentMoveInTabId[] = ["placement"];
-  if (resolved.housemates.length > 0) tabs.push("housemates");
-  if (resolved.generalHouseInfo || resolved.houseRulesText) tabs.push("info");
-  tabs.push("instructions");
-  return tabs;
+function SectionHeading({ children }: { children: React.ReactNode }) {
+  return <h2 className="text-sm font-semibold text-foreground">{children}</h2>;
 }
 
-function moveInDestinations(basePath: string, tabIds: readonly ResidentMoveInTabId[]) {
-  return tabIds.map((id) => ({
-    id,
-    label: RESIDENT_MOVE_IN_TAB_LABELS[id],
-    href: residentMoveInHref(basePath, id),
-    dataAttr: `resident-move-in-tab-${id}`,
-  }));
-}
-
-function ResidentMoveInTabContent({
-  resolved,
-  activeTab,
-}: {
-  resolved: ResidentMoveInResolved;
-  activeTab: ResidentMoveInTabId;
-}) {
-  const tab = availableTabs(resolved).includes(activeTab) ? activeTab : "placement";
+function ResidentMoveInContent({ resolved }: { resolved: ResidentMoveInResolved }) {
+  const hasInstructions =
+    Boolean(resolved.instructions?.trim()) ||
+    resolved.moveInPhotoDataUrls.length > 0 ||
+    Boolean(resolved.moveInVideoDataUrl);
 
   return (
-    <>
-      {tab === "placement" ? (
-        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Assigned room</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">{resolved.roomLabel}</p>
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Property</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">{resolved.propertyLabel}</p>
-              {resolved.addressLine ? <p className="mt-0.5 text-xs">{resolved.addressLine}</p> : null}
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in date</p>
-              <p className="mt-1 text-sm font-semibold text-foreground">
-                {resolved.earliestMoveInDateLabel ?? "Not set yet"}
-              </p>
-            </div>
-          </div>
-        </section>
-      ) : null}
+    <div className="space-y-8 text-sm leading-relaxed text-muted">
+      <section className="grid gap-4 sm:grid-cols-3">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Assigned room</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{resolved.roomLabel}</p>
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Property</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">{resolved.propertyLabel}</p>
+          {resolved.addressLine ? <p className="mt-0.5 text-xs">{resolved.addressLine}</p> : null}
+        </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Move-in date</p>
+          <p className="mt-1 text-sm font-semibold text-foreground">
+            {resolved.earliestMoveInDateLabel ?? "Not set yet"}
+          </p>
+        </div>
+      </section>
 
-      {tab === "housemates" ? (
-        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
+      {resolved.housemates.length > 0 ? (
+        <section className="space-y-3">
+          <SectionHeading>Housemates</SectionHeading>
           <ul className="divide-y divide-border">
             {resolved.housemates.map((mate) => (
               <li
@@ -93,60 +67,66 @@ function ResidentMoveInTabContent({
         </section>
       ) : null}
 
-      {tab === "info" ? (
-        <section className="space-y-3 rounded-xl border border-border bg-card p-4 sm:p-5">
-          {resolved.generalHouseInfo ? <div className="whitespace-pre-wrap">{resolved.generalHouseInfo}</div> : null}
-          {resolved.houseRulesText ? <div className="whitespace-pre-wrap">{resolved.houseRulesText}</div> : null}
+      {resolved.generalHouseInfo ? (
+        <section className="space-y-2">
+          <SectionHeading>About the home</SectionHeading>
+          <p className="whitespace-pre-wrap text-foreground">{resolved.generalHouseInfo}</p>
         </section>
       ) : null}
 
-      {tab === "instructions" ? (
-        <section className="rounded-xl border border-border bg-card p-4 sm:p-5">
-          <div className="whitespace-pre-wrap">
-            {resolved.instructions ?? (
-              <span>
-                No house instructions have been added for this room yet. Your property manager can add keys, parking,
-                access codes, and house rules when they edit the listing.
-              </span>
-            )}
-          </div>
+      {resolved.houseRulesText ? (
+        <section className="space-y-2">
+          <SectionHeading>House rules</SectionHeading>
+          <p className="whitespace-pre-wrap text-foreground">{resolved.houseRulesText}</p>
+        </section>
+      ) : null}
+
+      {resolved.amenities.length > 0 ? (
+        <section className="space-y-2">
+          <SectionHeading>Amenities</SectionHeading>
+          <ul className="list-disc space-y-1 pl-5 text-foreground">
+            {resolved.amenities.map((amenity) => (
+              <li key={amenity}>{amenity}</li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
+      {hasInstructions ? (
+        <section className="space-y-2">
+          <SectionHeading>Move-in instructions</SectionHeading>
+          {resolved.instructions?.trim() ? (
+            <p className="whitespace-pre-wrap text-foreground">{resolved.instructions}</p>
+          ) : (
+            <p className="text-muted">
+              No written instructions yet. Your property manager can add keys, parking, access codes, and house rules
+              when they edit the listing.
+            </p>
+          )}
           <ResidentMoveInMediaGallery
             photoDataUrls={resolved.moveInPhotoDataUrls}
             videoDataUrl={resolved.moveInVideoDataUrl}
           />
         </section>
       ) : null}
-    </>
+    </div>
   );
 }
 
-/** House details body: routed tabs always visible; content varies by placement / lock state. */
+/** House details — one scrollable page (placement, housemates, rules, and move-in instructions). */
 export function ResidentMoveInShell({
-  activeTab,
-  basePath = "/resident",
+  basePath: _basePath = "/resident",
   resolved,
   email,
   locked = false,
 }: {
-  activeTab: ResidentMoveInTabId;
   basePath?: string;
   resolved: ResidentMoveInResolved | null;
   email: string;
   locked?: boolean;
 }) {
-  const tabIds = resolved ? availableTabs(resolved) : RESIDENT_MOVE_IN_TABS;
-  const tab = tabIds.includes(activeTab) ? activeTab : "placement";
-
   return (
-    <div className="space-y-4 text-sm leading-relaxed text-muted">
-      <PortalListControlStack
-        className="mb-3 max-lg:mb-4"
-        destinationInset
-        destinations={moveInDestinations(basePath, tabIds)}
-        activeDestinationId={tab}
-        destinationAriaLabel="Placement views"
-      />
-
+    <div className="text-sm leading-relaxed text-muted">
       {locked ? (
         <>
           <p className={PORTAL_INLINE_UNLOCK_NOTICE_CLASS}>
@@ -165,7 +145,7 @@ export function ResidentMoveInShell({
           message="We could not find an approved placement tied to this account yet. Once your property manager assigns your listing room, your house details will appear here automatically."
         />
       ) : (
-        <ResidentMoveInTabContent resolved={resolved} activeTab={tab} />
+        <ResidentMoveInContent resolved={resolved} />
       )}
     </div>
   );
@@ -174,14 +154,13 @@ export function ResidentMoveInShell({
 /** @deprecated Use {@link ResidentMoveInShell} — kept for imports during migration. */
 export function ResidentMoveInResolvedView({
   resolved,
-  activeTab,
   basePath = "/resident",
 }: {
   resolved: ResidentMoveInResolved;
-  activeTab: ResidentMoveInTabId;
+  activeTab?: string;
   basePath?: string;
 }) {
   return (
-    <ResidentMoveInShell activeTab={activeTab} basePath={basePath} resolved={resolved} email="resident@placeholder.local" />
+    <ResidentMoveInShell basePath={basePath} resolved={resolved} email="resident@placeholder.local" />
   );
 }

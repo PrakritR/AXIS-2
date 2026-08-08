@@ -591,7 +591,7 @@ export function ResidentDashboard({
 
 
   const servicesHref = canUseServices ? `${BASE}/services/requests` : `${BASE}/services`;
-  const houseDetailsHref = `${BASE}/move-in/placement`;
+  const houseDetailsHref = `${BASE}/move-in`;
   const leaseUnlocked = applicationApproved;
   const leaseItems = leaseUnlocked && leaseRow ? [leaseRow] : [];
   const leaseDateRange = leaseRow?.application?.leaseStart
@@ -825,7 +825,7 @@ export function ResidentDashboard({
           {visibility.houseDetails ? (
           <AttentionGroup
             title="House details"
-            href={`${BASE}/move-in/placement`}
+            href={`${BASE}/move-in`}
             sectionId="houseDetails"
             tone="info"
             order={4}
@@ -838,7 +838,7 @@ export function ResidentDashboard({
             keyForItem={(item) => item.id}
             renderRow={() => (
               <IssueRow
-                href={`${BASE}/move-in/placement`}
+                href={`${BASE}/move-in`}
                 dot={sectionAccentDot("info")}
                 title="House details"
                 subtitle={

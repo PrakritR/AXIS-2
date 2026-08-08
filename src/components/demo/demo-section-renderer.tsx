@@ -256,7 +256,7 @@ function ResidentMoveInDemo() {
     <ManagerPortalPageShell title="House details">
       <div className="space-y-6 text-sm leading-relaxed text-muted">
         {resolved ? (
-          <ResidentMoveInResolvedView resolved={resolved} activeTab="placement" />
+          <ResidentMoveInResolvedView resolved={resolved} />
         ) : (
           <PortalDataTableEmpty message="House details appear here once a placement is assigned." icon="default" />
         )}

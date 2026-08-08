@@ -1,10 +1,6 @@
-import { renderResidentPortalSection } from "@/lib/portal-section-page";
+import { redirect } from "next/navigation";
 
-export default async function ResidentMoveInTabPage({
-  params,
-}: {
-  params: Promise<{ tab: string }>;
-}) {
-  const { tab } = await params;
-  return renderResidentPortalSection("move-in", [tab]);
+/** Legacy tab URLs fold into the single House details page. */
+export default function ResidentMoveInTabPage() {
+  redirect("/resident/move-in");
 }

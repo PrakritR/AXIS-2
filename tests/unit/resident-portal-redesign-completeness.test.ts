@@ -115,7 +115,6 @@ describe("resident portal redesign completeness", () => {
     const band2Panels: Array<{ file: string; marker: string }> = [
       { file: "resident-applications-panel.tsx", marker: "PortalListControlStack" },
       { file: "resident-payments-panel.tsx", marker: "PortalListControlStack" },
-      { file: "resident-move-in-view.tsx", marker: "PortalListControlStack" },
       { file: "resident-services-panel.tsx", marker: "PortalListControlStack" },
       { file: "resident-documents-panel.tsx", marker: "PortalListControlStack" },
     ];
