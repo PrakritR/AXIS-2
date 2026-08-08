@@ -48,8 +48,11 @@ function workOrderSmsBody(
       return `(Work order completed)\n"${title}"${at} is done.`;
     case "approved_paid":
       return `(Work order paid)\n"${title}"${at} approved and paid. Thanks for the work.`;
-    case "reminder":
-      return `(Reminder)\nPending work order "${title}"${at} needs attention.`;
+    case "reminder": {
+      const pendingLabel =
+        input.itemKind === "service-request" ? "add-on service request" : "work order";
+      return `(Reminder)\nPending ${pendingLabel} "${title}"${at} needs attention.`;
+    }
     default:
       return `(Update)\n"${title}"${at} update from PropLane.`;
   }
