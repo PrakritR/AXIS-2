@@ -664,6 +664,7 @@ export type LeasePipelineRow = {
     leaseStart: string;
     leaseEnd: string;
     monthlyRent: number | null;
+    rentalType?: "standard" | "short_term";
     requestedAtIso: string;
   } | null;
   /** Individual resident lease vs one household joint bundle lease. */

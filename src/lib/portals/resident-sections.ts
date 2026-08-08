@@ -9,6 +9,7 @@ export const RESIDENT_PORTAL_BASE_PATH = "/resident";
  */
 export const RESIDENT_FREE_TIER_SECTION_IDS = [
   "dashboard",
+  "tour",
   "lease",
   "applications",
   "payments",
@@ -111,6 +112,7 @@ export const RESIDENT_APPROVED_PORTAL_SECTIONS: PortalSection[] = [
   { section: "services", label: "Services", tabs: [...SERVICES_TABS] },
   { section: "payments", label: "Payments", tabs: [] },
   { section: "dashboard", label: "Dashboard", tabs: [] },
+  { section: "tour", label: "Tour", tabs: [] },
   { section: "communication", label: "Communication", tabs: [] },
   { section: "applications", label: "Applications", tabs: [] },
   { section: "lease", label: "Lease", tabs: [] },

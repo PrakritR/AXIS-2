@@ -57,6 +57,17 @@ function buildCreateAccountHref(searchParams: URLSearchParams): string {
   const params = new URLSearchParams();
   const next = searchParams.get("next")?.trim() ?? "";
   if (next && !isUnsafeRedirectPath(next)) params.set("next", next);
+  const tourInquiry = searchParams.get("tour_inquiry")?.trim() ?? "";
+  if (tourInquiry) params.set("tour_inquiry", tourInquiry);
+  const handoff = searchParams.get("handoff")?.trim() ?? "";
+  if (handoff === "message") params.set("handoff", "message");
+  const email = searchParams.get("email")?.trim() ?? "";
+  if (email) params.set("email", email);
+  const name = searchParams.get("name")?.trim() ?? "";
+  if (name) params.set("name", name);
+  const phone = searchParams.get("phone")?.trim() ?? "";
+  if (phone) params.set("phone", phone);
+  if (tourInquiry || handoff === "message") params.set("role", "resident");
   const qs = params.toString();
   return qs ? `/auth/create-account?${qs}` : "/auth/create-account";
 }

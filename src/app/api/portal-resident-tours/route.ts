@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
-import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
-import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
+import { ensureMayAccessResidentPortal } from "@/lib/auth/ensure-resident-portal-access.server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { loadResidentTourViews, linkAllTourInquiriesForEmail } from "@/lib/tour-resident-link.server";
 
@@ -12,20 +11,18 @@ export async function GET() {
   try {
     const { user, profile } = await getEffectiveSessionForPortal("resident");
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
-    const ctx = await getPortalAccessContext();
-    const preview = await getAdminPreviewFromCookies();
-    const mayAccessResidentPortal =
-      hasRole(ctx, "resident") || (hasAdminRole(ctx) && preview?.portal === "resident");
-    if (!mayAccessResidentPortal) {
-      return NextResponse.json({ error: "Forbidden." }, { status: 403 });
-    }
 
     const db = createSupabaseServiceRoleClient();
+    const access = await ensureMayAccessResidentPortal(db, user);
+    if (!access.ok) {
+      return NextResponse.json({ error: access.error }, { status: access.status });
+    }
+
     const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
     if (email.includes("@")) {
       await linkAllTourInquiriesForEmail(db, { userId: user.id, email });
     }
-    const tours = await loadResidentTourViews(db, user.id);
+    const tours = await loadResidentTourViews(db, user.id, { email });
     return NextResponse.json({ tours });
   } catch (e) {
     const message = e instanceof Error ? e.message : "Failed to load tours.";

@@ -115,7 +115,6 @@ describe("resident portal redesign completeness", () => {
     const band2Panels: Array<{ file: string; marker: string }> = [
       { file: "resident-applications-panel.tsx", marker: "PortalListControlStack" },
       { file: "resident-payments-panel.tsx", marker: "PortalListControlStack" },
-      { file: "resident-move-in-view.tsx", marker: "PortalListControlStack" },
       { file: "resident-services-panel.tsx", marker: "PortalListControlStack" },
       { file: "resident-documents-panel.tsx", marker: "PortalListControlStack" },
     ];
@@ -179,6 +178,13 @@ describe("resident portal redesign completeness", () => {
       }
       expect(readPanel("resident-payments-panel.tsx")).not.toContain("glass-card");
       expect(readPanel("resident-lease-panel.tsx")).not.toContain("glass-card");
+    });
+
+    it("house details is a single scroll page without routed sub-tabs", () => {
+      const moveIn = readPanel("resident-move-in-view.tsx");
+      expect(moveIn).not.toContain("PortalListControlStack");
+      expect(moveIn).toContain("Your placement");
+      expect(moveIn).toContain("Move-in instructions");
     });
 
     it("lease is a single view without status tabs; services filter rows span full width", () => {

@@ -2,14 +2,9 @@
  * Notify property manager when a prospect sends a leasing message.
  */
 
-import { formatPacificDateTime } from "@/lib/pacific-time";
-import {
-  resolveManagerRecipientProfiles,
-  resolvePropertyLeadRecipientIds,
-} from "@/lib/co-manager-notification-recipients.server";
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
-const MANAGER_INBOX_SCOPE = "axis_portal_inbox_manager_v1";
+import { appendManagerPropertyLeadInboxMessage } from "@/lib/property-manager-inbox-thread.server";
 
 type Db = ReturnType<typeof import("@/lib/supabase/service").createSupabaseServiceRoleClient>;
 
@@ -29,31 +24,25 @@ async function deliverEmail(to: string[], subject: string, text: string): Promis
 async function upsertManagerInbox(
   db: Db,
   managerUserId: string,
-  input: { subject: string; body: string; fromName: string; fromEmail: string },
+  input: {
+    propertyId: string;
+    propertyTitle: string;
+    subject: string;
+    body: string;
+    fromName: string;
+    fromEmail: string;
+    topic: string;
+  },
 ): Promise<void> {
-  const threadId = `lead-msg-${Date.now().toString(36)}`;
-  const now = formatPacificDateTime(new Date());
-  await db.from("portal_inbox_thread_records").upsert(
-    {
-      id: threadId,
-      scope: MANAGER_INBOX_SCOPE,
-      owner_user_id: managerUserId,
-      participant_email: input.fromEmail,
-      row_data: {
-        id: threadId,
-        folder: "inbox",
-        from: input.fromName,
-        email: input.fromEmail,
-        subject: input.subject,
-        preview: input.body.slice(0, 100),
-        body: input.body,
-        time: now,
-        unread: true,
-      },
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: "id" },
-  );
+  await appendManagerPropertyLeadInboxMessage(db, managerUserId, {
+    propertyId: input.propertyId,
+    propertyTitle: input.propertyTitle,
+    prospectName: input.fromName,
+    prospectEmail: input.fromEmail,
+    topic: input.topic,
+    subject: input.subject,
+    body: input.body,
+  });
 }
 
 export async function notifyManagerPropertyLeadMessage(input: {
@@ -99,10 +88,13 @@ export async function notifyManagerPropertyLeadMessage(input: {
   );
   for (const recipient of recipients) {
     await upsertManagerInbox(db, recipient.userId, {
+      propertyId: input.propertyId,
+      propertyTitle: property,
       subject,
       body: text,
       fromName: input.name,
       fromEmail: input.email,
+      topic: input.topic,
     });
   }
 }

@@ -1,19 +1,15 @@
 import { NextResponse } from "next/server";
 import { track } from "@/lib/analytics/posthog";
-import { ACTIVE_PORTAL_COOKIE } from "@/lib/auth/portal-access";
+import {
+  completeProspectHandoffForUser,
+  prospectHandoffSuccessResponse,
+} from "@/lib/auth/complete-prospect-handoff.server";
 import { findAuthUserIdByEmail } from "@/lib/auth/find-auth-user-id-by-email";
-import { provisionResidentAccountByEmail } from "@/lib/auth/provision-resident-account";
-import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
 import { assertPasswordMatchesExistingAuthUser } from "@/lib/auth/verify-auth-password";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import {
-  attachInboxThreadsToResident,
-  linkAllTourInquiriesForEmail,
-  linkTourInquiryToResident,
-  loadTourInquiryById,
-} from "@/lib/tour-resident-link.server";
-import { normalizeE164 } from "@/lib/twilio";
+import { loadTourInquiryById } from "@/lib/tour-resident-link.server";
+import { normalizeTourContactPhone } from "@/lib/tour-contact-quality";
 
 export const runtime = "nodejs";
 
@@ -32,6 +28,11 @@ function normalizeEmail(value: string): string {
   return value.trim().toLowerCase();
 }
 
+function textField(row: Record<string, unknown> | null | undefined, key: string): string {
+  const value = row?.[key];
+  return typeof value === "string" ? value.trim() : "";
+}
+
 /**
  * Opt-in resident account creation from a tour booking handoff.
  * Rate-limited and does not reveal whether an email already has an account.
@@ -46,7 +47,6 @@ export async function POST(req: Request) {
     const email = typeof body.email === "string" ? normalizeEmail(body.email) : "";
     const password = typeof body.password === "string" ? body.password : "";
     const fullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
-    const phone = normalizeE164(typeof body.phone === "string" ? body.phone : "");
     const tourInquiryId = typeof body.tourInquiryId === "string" ? body.tourInquiryId.trim() : "";
     const handoff = typeof body.handoff === "string" ? body.handoff.trim() : "";
 
@@ -56,21 +56,26 @@ export async function POST(req: Request) {
     if (!tourInquiryId && handoff !== "message") {
       return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
     }
-    if (tourInquiryId && !phone) {
-      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
-    }
 
     const supabase = createSupabaseServiceRoleClient();
+    let inquiry: Record<string, unknown> | null = null;
     if (tourInquiryId) {
-      const inquiry = await loadTourInquiryById(supabase, tourInquiryId);
+      inquiry = await loadTourInquiryById(supabase, tourInquiryId);
       if (!inquiry) {
         return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
       }
-      const inquiryEmail =
-        typeof inquiry.email === "string" ? inquiry.email.trim().toLowerCase() : "";
+      const inquiryEmail = textField(inquiry, "email").toLowerCase();
       if (!inquiryEmail || inquiryEmail !== email) {
         return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
       }
+    }
+
+    let phone =
+      normalizeTourContactPhone(typeof body.phone === "string" ? body.phone : "") ??
+      normalizeTourContactPhone(textField(inquiry, "phone")) ??
+      "";
+    if (tourInquiryId && !phone) {
+      return NextResponse.json({ error: GENERIC_FAILURE }, { status: 400 });
     }
 
     const { data: created, error: createErr } = await supabase.auth.admin.createUser({
@@ -105,31 +110,16 @@ export async function POST(req: Request) {
       userId = created.user.id;
     }
 
-    const provisioned = await provisionResidentAccountByEmail(supabase, {
+    const handoffResult = await completeProspectHandoffForUser(supabase, {
       userId,
       email,
-      fullName,
+      fullName: fullName || textField(inquiry, "name") || undefined,
       phone,
-      inheritFromApplication: false,
+      tourInquiryId: tourInquiryId || undefined,
+      handoff: handoff === "message" ? "message" : undefined,
     });
-    if (!provisioned.ok) {
-      return NextResponse.json({ error: GENERIC_FAILURE }, { status: provisioned.status });
-    }
-
-    await ensureProfileRoleRow(supabase, userId, "resident");
-
-    if (tourInquiryId) {
-      const linkResult = await linkTourInquiryToResident(supabase, {
-        userId,
-        inquiryId: tourInquiryId,
-        email,
-      });
-      if (!linkResult.ok) {
-        return NextResponse.json({ error: GENERIC_FAILURE }, { status: linkResult.status });
-      }
-      await linkAllTourInquiriesForEmail(supabase, { userId, email });
-    } else {
-      await attachInboxThreadsToResident(supabase, userId, email);
+    if (!handoffResult.ok) {
+      return NextResponse.json({ error: handoffResult.error }, { status: handoffResult.status });
     }
 
     track("resident_account_created", userId, {
@@ -137,20 +127,7 @@ export async function POST(req: Request) {
       ...(tourInquiryId ? { inquiry_id: tourInquiryId } : {}),
     });
 
-    const redirectTo = handoff === "message" ? "/resident/communication" : "/resident/tour/pending";
-    const res = NextResponse.json({
-      ok: true,
-      redirectTo,
-    });
-    const secure = process.env.NODE_ENV === "production";
-    res.cookies.set(ACTIVE_PORTAL_COOKIE, "resident", {
-      httpOnly: true,
-      sameSite: "lax",
-      path: "/",
-      maxAge: 60 * 60 * 24 * 365,
-      secure,
-    });
-    return res;
+    return prospectHandoffSuccessResponse(handoffResult.redirectTo);
   } catch {
     return NextResponse.json({ error: GENERIC_FAILURE }, { status: 500 });
   }

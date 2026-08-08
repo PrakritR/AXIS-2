@@ -58,6 +58,7 @@ describe("portal nav order contracts", () => {
     const items = RESIDENT_APPROVED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const ordered = orderNativeBottomNavItems(items, "resident").map((item) => item.section);
     expect(ordered).toEqual([
+      "tour",
       "applications",
       "dashboard",
       "lease",
@@ -95,7 +96,7 @@ describe("pro portal nav grouping (leasing → tenancy → operations → market
   });
 
   it("places feedback after finances and before settings", () => {
-    expect(sections.slice(-4)).toEqual(["financials", "documents", "bugs-feedback", "profile"]);
+    expect(sections.slice(-4)).toEqual(["documents", "bugs-feedback", "app", "profile"]);
   });
 
   it("does not expose plan as a top-level nav section", () => {
@@ -132,7 +133,7 @@ describe("resident portal nav grouping", () => {
 
   it("approved: leads with resident operations before reference sections", () => {
     const sections = sectionIds(RESIDENT_APPROVED_PORTAL_SECTIONS);
-    expect(sections.slice(0, 4)).toEqual(["services", "payments", "dashboard", "communication"]);
+    expect(sections.slice(0, 4)).toEqual(["services", "payments", "dashboard", "tour"]);
     expectContiguousBlock(sections, ["applications", "lease", "move-in"], "communication", "documents");
   });
 

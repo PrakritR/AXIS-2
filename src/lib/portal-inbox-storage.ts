@@ -49,6 +49,8 @@ export type PersistedInboxThread = {
   body: string;
   time: string;
   unread: boolean;
+  /** When true, the root turn renders as the owner's outbound message in inbox threads. */
+  rootOutbound?: boolean;
   /** Root-turn attachments when the thread was opened with media. */
   attachments?: { url: string; name?: string }[];
   messages?: InboxThreadMessage[];
@@ -446,6 +448,7 @@ export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMe
     from: thread.from,
     body: thread.body,
     at: thread.time,
+    ...(thread.rootOutbound ? { outbound: true } : {}),
     ...(thread.attachments?.length ? { attachments: thread.attachments } : {}),
   };
   return [root, ...(thread.messages ?? [])];

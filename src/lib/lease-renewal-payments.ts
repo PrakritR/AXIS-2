@@ -27,6 +27,7 @@ import {
   updateLeasePipelineRow,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
+import { renewalRentalTypeForTerm } from "@/lib/lease-renewal-terms";
 
 export function applySignedLeaseRenewal(leaseRowId: string, managerUserId: string | null): boolean {
   const leaseRow = readLeasePipeline(managerUserId ?? undefined).find((r) => r.id === leaseRowId);
@@ -44,6 +45,8 @@ export function applySignedLeaseRenewal(leaseRowId: string, managerUserId: strin
 
   if (idx >= 0) {
     const existing = rows[idx]!;
+    const rentalType = renewal.rentalType ?? renewalRentalTypeForTerm(renewal.leaseTerm);
+    const isShortTerm = rentalType === "short_term";
     const nextRow = {
       ...existing,
       ...(renewal.monthlyRent != null ? { signedMonthlyRent: renewal.monthlyRent } : {}),
@@ -56,6 +59,7 @@ export function applySignedLeaseRenewal(leaseRowId: string, managerUserId: strin
       application: existing.application
         ? {
             ...existing.application,
+            rentalType,
             leaseTerm: renewal.leaseTerm,
             leaseStart: renewal.leaseStart,
             leaseEnd: renewal.leaseEnd,
@@ -69,7 +73,12 @@ export function applySignedLeaseRenewal(leaseRowId: string, managerUserId: strin
     upsertApplicationRowToServer(nextRow);
 
     const propertyId = nextRow.assignedPropertyId ?? nextRow.application?.propertyId ?? leaseRow.propertyId ?? "";
-    if (propertyId && renewal.monthlyRent != null && Number.isFinite(renewal.monthlyRent)) {
+    if (
+      !isShortTerm &&
+      propertyId &&
+      renewal.monthlyRent != null &&
+      Number.isFinite(renewal.monthlyRent)
+    ) {
       updatePendingRentAmountForResident(residentEmail, propertyId, renewal.monthlyRent, managerUserId);
     }
     // force=true wipes and regenerates the pending schedule (deposit/move-in

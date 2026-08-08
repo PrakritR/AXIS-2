@@ -1,6 +1,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import { legacyPaidPortalToPortal } from "@/lib/legacy-portal-redirect";
+import { isStaleRefreshTokenError } from "@/lib/supabase/safe-browser-session";
 
 const PROTECTED_PREFIXES = ["/portal", "/pro", "/manager", "/owner", "/resident", "/admin", "/vendor"];
 
@@ -56,15 +57,19 @@ export async function middleware(request: NextRequest) {
     },
   });
 
-  // getSession reads the JWT from the cookie — no network round-trip, no timeout risk.
-  // API routes and server components call getUser() for full server-side validation.
+  // Validate the session server-side so corrupt refresh cookies are cleared before portal routes run.
   const {
-    data: { session },
-  } = await supabase.auth.getSession();
+    data: { user },
+    error: userError,
+  } = await supabase.auth.getUser();
+
+  if (userError && isStaleRefreshTokenError(userError)) {
+    await supabase.auth.signOut();
+  }
 
   const needsAuth = PROTECTED_PREFIXES.some((p) => path === p || path.startsWith(`${p}/`));
 
-  if (needsAuth && !session) {
+  if (needsAuth && !user) {
     const redirectUrl = new URL("/auth/sign-in", request.url);
     redirectUrl.searchParams.set("next", path);
     return NextResponse.redirect(redirectUrl);

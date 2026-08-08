@@ -1,5 +1,6 @@
 import { cache } from "react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+import { isStaleRefreshTokenError } from "@/lib/supabase/safe-browser-session";
 
 export type ServerProfile = {
   id: string;
@@ -47,7 +48,14 @@ export const getServerSessionProfile = cache(
       const supabase = await createSupabaseServerClient();
       const {
         data: { user },
+        error: userError,
       } = await supabase.auth.getUser();
+      if (userError) {
+        if (isStaleRefreshTokenError(userError)) {
+          await supabase.auth.signOut().catch(() => undefined);
+        }
+        return { user: null, profile: null };
+      }
       if (!user) return { user: null, profile: null };
 
       let profile: ServerProfile | null = null;

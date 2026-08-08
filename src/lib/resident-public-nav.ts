@@ -46,7 +46,12 @@ export function residentCreateAccountHref(
 
 export function residentSignInHref(
   nextPath = RESIDENT_APPLICATIONS_PATH,
-  opts?: { tourInquiryId?: string },
+  opts?: {
+    tourInquiryId?: string;
+    email?: string;
+    fullName?: string;
+    phone?: string;
+  },
 ): string {
   const baseNext = nextPath.startsWith("/") ? nextPath : RESIDENT_APPLICATIONS_PATH;
   const tourInquiryId = opts?.tourInquiryId?.trim();
@@ -56,6 +61,13 @@ export function residentSignInHref(
     ? `/resident/tour?link_tour=${encodeURIComponent(tourInquiryId)}`
     : baseNext;
   const q = new URLSearchParams({ intent: "resident", next });
+  const email = opts?.email?.trim().toLowerCase();
+  if (email) q.set("email", email);
+  const fullName = opts?.fullName?.trim();
+  if (fullName) q.set("name", fullName);
+  const phone = opts?.phone?.trim();
+  if (phone) q.set("phone", phone);
+  if (tourInquiryId) q.set("tour_inquiry", tourInquiryId);
   return `/auth/sign-in?${q.toString()}`;
 }
 

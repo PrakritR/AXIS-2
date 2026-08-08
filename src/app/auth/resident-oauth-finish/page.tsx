@@ -10,6 +10,10 @@ import {
   readResidentSignupNext,
   readResidentSignupSetupToken,
 } from "@/lib/auth/resident-oauth-storage";
+import {
+  clearProspectHandoff,
+  readProspectHandoff,
+} from "@/lib/auth/prospect-handoff-storage";
 import { waitForAuthUser } from "@/lib/auth/wait-for-auth-user";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import Link from "next/link";
@@ -44,6 +48,7 @@ function ResidentOauthFinishContent() {
 
         const storedAxisId = readResidentSignupAxisId();
         const storedToken = readResidentSignupSetupToken();
+        const prospectHandoff = readProspectHandoff();
         const res = await fetch("/api/auth/register-resident-oauth", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -51,6 +56,10 @@ function ResidentOauthFinishContent() {
           body: JSON.stringify({
             axisId: storedAxisId || undefined,
             token: storedToken || undefined,
+            tourInquiryId: prospectHandoff?.tourInquiryId,
+            handoff: prospectHandoff?.handoff,
+            fullName: prospectHandoff?.fullName,
+            phone: prospectHandoff?.phone,
           }),
         });
         const body = (await res.json()) as { error?: string; redirectTo?: string };
@@ -61,9 +70,17 @@ function ResidentOauthFinishContent() {
 
         clearResidentSignupAxisId();
         clearResidentSignupSetupToken();
-        const next = readResidentSignupNext();
+        const storedNext = readResidentSignupNext();
         clearResidentSignupNext();
-        window.location.replace(next ?? body.redirectTo ?? "/resident/applications");
+        const prospectNext = prospectHandoff?.nextPath;
+        clearProspectHandoff();
+        window.location.replace(
+          prospectNext?.startsWith("/")
+            ? prospectNext
+            : storedNext?.startsWith("/")
+              ? storedNext
+              : body.redirectTo ?? "/resident/applications",
+        );
       } catch (e) {
         const message = e instanceof Error ? e.message : "Could not finish resident signup.";
         setErrorText(message);

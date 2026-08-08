@@ -1,6 +1,7 @@
 import { cache } from "react";
 import { authorizeResidentRole } from "@/lib/auth/resident-role-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
+import { residentHasTourLinks } from "@/lib/tour-resident-link.server";
 import { isWithdrawnApplicationRow } from "@/lib/rental-application/resident-application-list";
 import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-application-ownership";
 import type {
@@ -219,11 +220,7 @@ const loadResidentPortalAccessStateCached = cache(
     const leaseAccessUnlocked = leaseSigned;
     let hasTourLink = false;
     if (userId) {
-      const { count: tourLinkCount } = await db
-        .from("resident_tour_links")
-        .select("id", { count: "exact", head: true })
-        .eq("resident_user_id", userId);
-      hasTourLink = (tourLinkCount ?? 0) > 0;
+      hasTourLink = await residentHasTourLinks(db, userId, email);
     }
     const isPreLeaseResident =
       roleOk && !leaseSigned && (hasTourLink || hasSubmittedApplication || applicationApproved);

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { normalizePortalRoles } from "@/lib/auth/portal-roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { safeBrowserGetSession } from "@/lib/supabase/safe-browser-session";
 
 export type ProspectContactAutofill = {
   ready: boolean;
@@ -57,8 +58,8 @@ export function useProspectContactAutofill(): ProspectContactAutofill {
       });
     }
 
-    void supabase.auth.getSession().then((result) => {
-      void sync(result.data.session);
+    void safeBrowserGetSession(supabase).then(({ session }) => {
+      void sync(session);
     });
 
     const {

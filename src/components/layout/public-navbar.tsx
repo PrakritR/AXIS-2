@@ -6,6 +6,7 @@ import { useIsNativeApp } from "@/hooks/use-is-native-app";
 import { portalDashboardPath, normalizePortalRoles, parseAuthRole, type AuthRole } from "@/lib/auth/portal-roles";
 import { RESIDENT_BROWSE_PATH } from "@/lib/resident-public-nav";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { safeBrowserGetSession } from "@/lib/supabase/safe-browser-session";
 import type { Session } from "@supabase/supabase-js";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -62,8 +63,8 @@ export function PublicNavbar() {
       setPrimaryRole(roles[0] ?? parseAuthRole(String(profile?.role ?? session.user.user_metadata?.role ?? "")));
     }
 
-    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-      void syncAuth(result.data.session);
+    void safeBrowserGetSession(supabase).then(({ session }) => {
+      void syncAuth(session);
     });
     const { data: listener } = supabase.auth.onAuthStateChange((_event: string, session: Session | null) => {
       void syncAuth(session);

@@ -107,7 +107,8 @@ describe("splitNativeBottomNavItems", () => {
     const items = RESIDENT_LIMITED_PORTAL_SECTIONS.map((s) => ({ section: s.section, label: s.label }));
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident", "post_approval_pre_lease");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_POST_APPROVAL_PRIMARY]);
-    expect(overflow.map((item) => item.section)).toContain("tour");
+    expect(overflow.map((item) => item.section)).toContain("dashboard");
+    expect(overflow.map((item) => item.section)).not.toContain("tour");
     expect(overflow.map((item) => item.section)).toContain("documents");
     expect(primary.length + overflow.length).toBe(items.length - 1);
   });
@@ -123,6 +124,8 @@ describe("splitNativeBottomNavItems", () => {
     const { primary, overflow } = splitNativeBottomNavItems(items, "resident", "post_lease");
     expect(primary.map((item) => item.section)).toEqual([...NATIVE_BOTTOM_NAV_RESIDENT_PRIMARY]);
     expect(overflow.map((item) => item.section)).toContain("documents");
+    expect(overflow.map((item) => item.section)).toContain("dashboard");
+    expect(overflow.map((item) => item.section)).not.toContain("tour");
     expect(primary.length + overflow.length).toBe(items.length - 1);
   });
 

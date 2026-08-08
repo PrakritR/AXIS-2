@@ -1,4 +1,9 @@
 import { NextResponse } from "next/server";
+import { track } from "@/lib/analytics/posthog";
+import {
+  completeProspectHandoffForUser,
+  prospectHandoffSuccessResponse,
+} from "@/lib/auth/complete-prospect-handoff.server";
 import {
   consumeResidentSetupTokenOnApplication,
   findApplicationForResidentSetup,
@@ -11,7 +16,21 @@ import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
-type Body = { axisId?: string; token?: string };
+type Body = {
+  axisId?: string;
+  token?: string;
+  tourInquiryId?: string;
+  handoff?: string;
+  fullName?: string;
+  phone?: string;
+};
+
+function oauthFullName(meta: Record<string, unknown> | null | undefined): string | undefined {
+  const fullName = typeof meta?.full_name === "string" ? meta.full_name.trim() : "";
+  if (fullName) return fullName;
+  const name = typeof meta?.name === "string" ? meta.name.trim() : "";
+  return name || undefined;
+}
 
 /**
  * Complete resident OAuth signup.
@@ -34,6 +53,10 @@ export async function POST(req: Request) {
     const body = (await req.json()) as Body;
     const token = typeof body.token === "string" ? body.token.trim() : "";
     const axisId = typeof body.axisId === "string" ? body.axisId.trim() : "";
+    const tourInquiryId = typeof body.tourInquiryId === "string" ? body.tourInquiryId.trim() : "";
+    const handoff = typeof body.handoff === "string" ? body.handoff.trim() : "";
+    const prospectFullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
+    const prospectPhone = typeof body.phone === "string" ? body.phone.trim() : "";
 
     const supabaseAuth = await createSupabaseServerClient();
     const {
@@ -47,13 +70,30 @@ export async function POST(req: Request) {
     const service = createSupabaseServiceRoleClient();
     const oauthEmail = user.email.trim().toLowerCase();
 
+    if ((tourInquiryId || handoff === "message") && !token && !axisId) {
+      const handoffResult = await completeProspectHandoffForUser(service, {
+        userId: user.id,
+        email: oauthEmail,
+        fullName: prospectFullName || oauthFullName(user.user_metadata),
+        phone: prospectPhone,
+        tourInquiryId: tourInquiryId || undefined,
+        handoff: handoff === "message" ? "message" : undefined,
+      });
+      if (!handoffResult.ok) {
+        return NextResponse.json({ error: handoffResult.error }, { status: handoffResult.status });
+      }
+
+      track("resident_account_created", user.id, {
+        source: tourInquiryId ? "tour_booking" : "property_message",
+        ...(tourInquiryId ? { inquiry_id: tourInquiryId } : {}),
+        oauth: true,
+      });
+
+      return prospectHandoffSuccessResponse(handoffResult.redirectTo);
+    }
+
     if (!token || !axisId) {
-      const fullName =
-        typeof user.user_metadata?.full_name === "string"
-          ? user.user_metadata.full_name
-          : typeof user.user_metadata?.name === "string"
-            ? user.user_metadata.name
-            : undefined;
+      const fullName = oauthFullName(user.user_metadata);
 
       // DEFAULT-DENY: no setup token means this OAuth sign-in has not proven
       // control of a prior applicant's email, so it never inherits.
@@ -95,12 +135,7 @@ export async function POST(req: Request) {
       applicationRow = await relinkResidentSetupApplicationEmail(service, lookup.row, oauthEmail);
     }
 
-    const fullName =
-      typeof user.user_metadata?.full_name === "string"
-        ? user.user_metadata.full_name
-        : typeof user.user_metadata?.name === "string"
-          ? user.user_metadata.name
-          : lookup.name;
+    const fullName = oauthFullName(user.user_metadata) ?? lookup.name;
 
     const result = await provisionResidentAccountByEmail(service, {
       userId: user.id,

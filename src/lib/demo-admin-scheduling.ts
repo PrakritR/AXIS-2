@@ -205,14 +205,25 @@ function writeJson(key: string, value: unknown) {
   void writeJsonToServer(key, value).catch(() => undefined);
 }
 
-async function persistPublicPartnerInquiry(row: PartnerInquiry): Promise<{ ok: boolean; error?: string }> {
+async function persistPublicPartnerInquiry(
+  row: PartnerInquiry,
+): Promise<{ ok: boolean; row?: PartnerInquiry; error?: string }> {
   if (!isBrowser()) return { ok: false, error: "Browser required." };
   const res = await fetch("/api/public/partner-inquiries", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     body: JSON.stringify({ row }),
   });
-  if (res.ok) return { ok: true };
+  if (res.ok) {
+    try {
+      const body = (await res.json()) as { row?: PartnerInquiry };
+      if (body.row?.id) return { ok: true, row: body.row };
+    } catch {
+      // Fall back to the client-built row when the response is not JSON.
+    }
+    return { ok: true, row };
+  }
   let error = "Could not save inquiry.";
   try {
     const body = (await res.json()) as { error?: unknown };
@@ -601,8 +612,9 @@ export async function appendPartnerInquiryToServer(
   const row = buildPartnerInquiry(payload);
   const result = await persistPublicPartnerInquiry(row);
   if (!result.ok) return { ok: false, error: result.error };
-  insertPartnerInquiryLocally(row);
-  return { ok: true, row };
+  const persistedRow = result.row ?? row;
+  insertPartnerInquiryLocally(persistedRow);
+  return { ok: true, row: persistedRow };
 }
 
 export function updatePartnerInquiry(id: string, patch: Partial<PartnerInquiry>) {

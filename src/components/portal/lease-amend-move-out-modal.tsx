@@ -6,7 +6,11 @@ import { Input, Select } from "@/components/ui/input";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { computeLeaseEndDate, shouldAutoComputeLeaseEnd } from "@/lib/rental-application/lease-dates";
-import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
+import { CUSTOM_LEASE_TERM, SHORT_TERM_LEASE_TERM } from "@/lib/rental-application/lease-terms";
+import {
+  renewalLeaseTermOptionsForProperty,
+  renewalRentalTypeForTerm,
+} from "@/lib/lease-renewal-terms";
 import { formatPacificDate } from "@/lib/pacific-time";
 
 type AvailabilityResult =
@@ -229,6 +233,8 @@ export function LeaseRenewModal({
   currentEnd,
   currentTerm,
   currentRentLabel,
+  propertyId,
+  currentRentalType,
   leaseId,
   onSuccess,
 }: {
@@ -237,12 +243,23 @@ export function LeaseRenewModal({
   currentEnd: string;
   currentTerm: string;
   currentRentLabel: string;
+  propertyId: string;
+  currentRentalType?: "standard" | "short_term" | string | null;
   leaseId: string;
   onSuccess: () => void;
 }) {
   const { showToast } = useAppUi();
+  const termOptions = useMemo(() => renewalLeaseTermOptionsForProperty(propertyId), [propertyId]);
   const defaultStart = currentEnd ? dayAfter(currentEnd) : new Date().toISOString().slice(0, 10);
-  const [leaseTerm, setLeaseTerm] = useState(currentTerm || "12-Month");
+  const initialTerm = useMemo(() => {
+    const trimmed = currentTerm.trim();
+    if (trimmed && termOptions.includes(trimmed)) return trimmed;
+    if (currentRentalType === "short_term" && termOptions.includes(SHORT_TERM_LEASE_TERM)) {
+      return SHORT_TERM_LEASE_TERM;
+    }
+    return termOptions[0] ?? "12-Month";
+  }, [currentTerm, currentRentalType, termOptions]);
+  const [leaseTerm, setLeaseTerm] = useState(initialTerm);
   const [leaseStart, setLeaseStart] = useState(defaultStart);
   const [customEnd, setCustomEnd] = useState("");
   const [rent, setRent] = useState(() => currentRentLabel.replace(/[^\d.]/g, ""));
@@ -251,22 +268,24 @@ export function LeaseRenewModal({
   useEffect(() => {
     if (!open) {
       queueMicrotask(() => {
-        setLeaseTerm(currentTerm || "12-Month");
+        setLeaseTerm(initialTerm);
         setLeaseStart(defaultStart);
         setCustomEnd("");
         setRent(currentRentLabel.replace(/[^\d.]/g, ""));
         setSubmitting(false);
       });
     }
-  }, [open, currentTerm, defaultStart, currentRentLabel]);
+  }, [open, initialTerm, defaultStart, currentRentLabel]);
 
-  const isMonthToMonth = leaseTerm === "Month-to-Month";
-  const isCustom = leaseTerm === "Custom";
+  const rentalType = renewalRentalTypeForTerm(leaseTerm);
+  const isShortTerm = rentalType === "short_term";
+  const isMonthToMonth = !isShortTerm && leaseTerm === "Month-to-Month";
+  const isCustom = !isShortTerm && leaseTerm === CUSTOM_LEASE_TERM;
   const leaseEnd = useMemo(() => {
     if (isMonthToMonth) return "";
-    if (isCustom) return customEnd;
-    return shouldAutoComputeLeaseEnd(leaseTerm) ? computeLeaseEndDate(leaseStart, leaseTerm) : customEnd;
-  }, [leaseTerm, leaseStart, customEnd, isMonthToMonth, isCustom]);
+    if (isShortTerm || isCustom) return customEnd;
+    return shouldAutoComputeLeaseEnd(leaseTerm, rentalType) ? computeLeaseEndDate(leaseStart, leaseTerm) : customEnd;
+  }, [leaseTerm, leaseStart, customEnd, isMonthToMonth, isShortTerm, isCustom, rentalType]);
 
   const rentAmount = rent.trim() ? Number(rent.replace(/[^\d.]/g, "")) : null;
   const canConfirm =
@@ -291,6 +310,7 @@ export function LeaseRenewModal({
           leaseStart,
           leaseEnd,
           monthlyRent: rentAmount,
+          rentalType,
         }),
       });
       const json = (await res.json()) as { ok?: boolean; error?: string };
@@ -327,22 +347,32 @@ export function LeaseRenewModal({
       <div className="mb-4">
         <label className="mb-1.5 block text-sm font-semibold text-muted">New lease term</label>
         <Select value={leaseTerm} onChange={(e) => setLeaseTerm(e.target.value)} data-attr="lease-renew-term">
-          {LEASE_TERM_OPTIONS.map((t) => (
+          {termOptions.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>
           ))}
         </Select>
+        {termOptions.length === 0 ? (
+          <p className="mt-1.5 text-xs text-muted">No lease lengths are configured for this property.</p>
+        ) : null}
         {isMonthToMonth ? (
           <p className="mt-1.5 text-xs text-muted">
             Month-to-month continues automatically each month, with no end date. Either party can end it with proper notice.
+          </p>
+        ) : null}
+        {isShortTerm ? (
+          <p className="mt-1.5 text-xs text-muted">
+            Short-term renewals bill the full stay up front once both parties sign. Choose check-in and check-out dates for the new stay.
           </p>
         ) : null}
       </div>
 
       <div className="mb-4 grid gap-4 sm:grid-cols-2">
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-muted">Renewal starts</label>
+          <label className="mb-1.5 block text-sm font-semibold text-muted">
+            {isShortTerm ? "Check-in" : "Renewal starts"}
+          </label>
           <input
             type="date"
             value={leaseStart}
@@ -351,10 +381,12 @@ export function LeaseRenewModal({
           />
         </div>
         <div>
-          <label className="mb-1.5 block text-sm font-semibold text-muted">Ends</label>
+          <label className="mb-1.5 block text-sm font-semibold text-muted">
+            {isShortTerm ? "Check-out" : "Ends"}
+          </label>
           {isMonthToMonth ? (
             <div className="rounded-xl border border-border bg-accent/30 px-3 py-2.5 text-sm text-muted">Open-ended</div>
-          ) : isCustom || !shouldAutoComputeLeaseEnd(leaseTerm) ? (
+          ) : isShortTerm || isCustom || !shouldAutoComputeLeaseEnd(leaseTerm, rentalType) ? (
             <input
               type="date"
               value={customEnd}
@@ -371,7 +403,9 @@ export function LeaseRenewModal({
       </div>
 
       <div className="mb-4">
-        <label className="mb-1.5 block text-sm font-semibold text-muted">Monthly rent</label>
+        <label className="mb-1.5 block text-sm font-semibold text-muted">
+          {isShortTerm ? "Nightly rate" : "Monthly rent"}
+        </label>
         <div className="relative">
           <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted">$</span>
           <Input
@@ -384,13 +418,16 @@ export function LeaseRenewModal({
           />
         </div>
         <p className="mt-1.5 text-xs text-muted">
-          Leave unchanged to keep the current rent{currentRentLabel ? ` (${currentRentLabel})` : ""}.
+          Leave unchanged to keep the current {isShortTerm ? "nightly rate" : "rent"}
+          {currentRentLabel ? ` (${currentRentLabel})` : ""}.
         </p>
       </div>
 
       <p className="mb-5 rounded-xl border px-4 py-3 text-xs portal-banner-info">
         The renewed lease is regenerated with these terms and goes back through resident + manager signatures.
-        Rent charges and the payment schedule update automatically once both parties have signed.
+        {isShortTerm
+          ? " The stay total and move-in charges refresh automatically once both parties have signed."
+          : " Rent charges and the payment schedule update automatically once both parties have signed."}
       </p>
 
       <div className="flex gap-2.5">

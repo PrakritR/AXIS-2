@@ -1,6 +1,6 @@
 /** Lease term labels shared by listing submission, rental application, and manager portal. */
 
-export const LEASE_TERM_OPTIONS = ["3-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
+export const LEASE_TERM_OPTIONS = ["3-Month", "6-Month", "9-Month", "12-Month", "Month-to-Month", "Custom"] as const;
 export const SHORT_TERM_LEASE_TERM = "Short-Term Stay";
 /**
  * "Custom" is the escape hatch a manager/applicant reaches for when none of the

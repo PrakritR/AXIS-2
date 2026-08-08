@@ -27,6 +27,9 @@ vi.mock("@/lib/auth/admin-preview", () => ({
 vi.mock("@/lib/supabase/service", () => ({
   createSupabaseServiceRoleClient: vi.fn(),
 }));
+vi.mock("@/lib/auth/ensure-resident-portal-access.server", () => ({
+  ensureMayAccessResidentPortal: vi.fn(async () => ({ ok: true })),
+}));
 vi.mock("@/lib/tour-resident-link.server", () => ({
   loadResidentTourViews: vi.fn(),
   linkAllTourInquiriesForEmail: vi.fn(),

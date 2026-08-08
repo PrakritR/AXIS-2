@@ -4,6 +4,7 @@
 
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 import { formatPacificDateTime } from "@/lib/pacific-time";
+import { appendResidentPropertyManagerInboxMessage } from "@/lib/property-manager-inbox-thread.server";
 import { sendPropLaneSms } from "@/lib/proplane-sms-transport.server";
 import { sendResidentOutboundSms } from "@/lib/resident-outbound-sms.server";
 import {
@@ -110,10 +111,20 @@ async function upsertInboxThread(
     toLine: string;
     subject: string;
     body: string;
+    preview?: string;
+    rootOutbound?: boolean;
+    messages?: Array<{
+      id: string;
+      from: string;
+      body: string;
+      at: string;
+      outbound?: boolean;
+    }>;
+    threadType?: string;
   },
 ): Promise<void> {
   const when = formatPacificDateTime(new Date());
-  const preview = input.body.slice(0, 100).replace(/\n/g, " ");
+  const preview = (input.preview ?? input.body).slice(0, 100).replace(/\n/g, " ");
   const ts = Date.now();
   const rand = Math.random().toString(36).slice(2, 6);
   const threadId = `tour_${input.folder}_${ts}_${rand}`;
@@ -123,7 +134,7 @@ async function upsertInboxThread(
       scope: input.scope,
       owner_user_id: input.ownerUserId,
       participant_email: input.participantEmail.trim().toLowerCase(),
-      thread_type: "tour_notification",
+      thread_type: input.threadType ?? "tour_notification",
       row_data: {
         id: threadId,
         folder: input.folder,
@@ -135,6 +146,8 @@ async function upsertInboxThread(
         time: when,
         unread: input.folder === "inbox",
         scope: input.scope,
+        ...(input.rootOutbound ? { rootOutbound: true } : {}),
+        ...(input.messages?.length ? { messages: input.messages } : {}),
       },
       updated_at: new Date().toISOString(),
     },
@@ -152,14 +165,74 @@ export async function recordResidentProspectInboxMessage(
     fromName?: string;
     fromEmail?: string;
     threadType?: string;
+    /** When set, stores the resident's outbound turn as the root message and `body` as the follow-up ack. */
+    residentMessage?: string;
+    residentName?: string;
+    /** Counterparty email stored on the thread (e.g. the manager's inbox address). */
+    counterpartyEmail?: string;
+    managerUserId?: string;
+    propertyId?: string;
+    propertyTitle?: string;
   },
 ): Promise<void> {
+  const managerUserId = input.managerUserId?.trim() ?? "";
+  const propertyId = input.propertyId?.trim() ?? "";
+  const propertyTitle = input.propertyTitle?.trim() ?? "";
+  if (managerUserId && propertyId) {
+    await appendResidentPropertyManagerInboxMessage(db, {
+      participantEmail: input.participantEmail,
+      managerUserId,
+      propertyId,
+      propertyTitle: propertyTitle || propertyId,
+      subject: input.subject,
+      body: input.body,
+      residentMessage: input.residentMessage,
+      residentName: input.residentName,
+      counterpartyEmail: input.counterpartyEmail ?? input.fromEmail,
+      fromName: input.fromName,
+    });
+    return;
+  }
+
   const guestEmail = input.participantEmail.trim().toLowerCase();
   if (!guestEmail.includes("@")) return;
   const { data: guestProfile } = await db.from("profiles").select("id").eq("email", guestEmail).maybeSingle();
+  const ownerUserId = (guestProfile?.id as string | null) ?? null;
+  const residentMessage = input.residentMessage?.trim() ?? "";
+  const counterpartyEmail = input.counterpartyEmail?.trim().toLowerCase() || input.fromEmail || "tours@axis.local";
+
+  if (residentMessage) {
+    const when = formatPacificDateTime(new Date());
+    const ackFrom = input.fromName ?? "PropLane";
+    await upsertInboxThread(db, {
+      scope: RESIDENT_INBOX_SCOPE,
+      ownerUserId,
+      participantEmail: guestEmail,
+      folder: "inbox",
+      fromName: input.residentName?.trim() || "You",
+      fromEmail: counterpartyEmail,
+      toLine: guestEmail,
+      subject: input.subject,
+      body: residentMessage,
+      preview: input.body,
+      rootOutbound: true,
+      threadType: input.threadType ?? "portal_message",
+      messages: [
+        {
+          id: `ack-${Date.now().toString(36)}`,
+          from: ackFrom,
+          body: input.body,
+          at: when,
+          outbound: false,
+        },
+      ],
+    });
+    return;
+  }
+
   await upsertInboxThread(db, {
     scope: RESIDENT_INBOX_SCOPE,
-    ownerUserId: (guestProfile?.id as string | null) ?? null,
+    ownerUserId,
     participantEmail: guestEmail,
     folder: "inbox",
     fromName: input.fromName ?? "PropLane",
@@ -167,6 +240,7 @@ export async function recordResidentProspectInboxMessage(
     toLine: guestEmail,
     subject: input.subject,
     body: input.body,
+    threadType: input.threadType,
   });
 }
 
@@ -329,6 +403,9 @@ export async function notifyTenantTourRequestReceived(
     subject,
     body: text,
     fromName: "PropLane Tours",
+    managerUserId: textField(inquiry as Record<string, unknown>, "managerUserId"),
+    propertyId,
+    propertyTitle: ctx.propertyTitle,
   });
 
   const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
