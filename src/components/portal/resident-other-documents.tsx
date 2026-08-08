@@ -23,6 +23,7 @@ import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PortalTableInlineExpand,
   PORTAL_DETAIL_BTN,
   RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN,
+  ResidentDocumentsDetailFooter,
 } from "@/components/portal/portal-data-table";
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
@@ -741,7 +742,7 @@ export function ResidentOtherDocumentsTable({
       ) : null}
       {selectedFooterActions ? (
         <PortalPageFooterActions pinned rowVariant="header">
-          {selectedFooterActions}
+          <ResidentDocumentsDetailFooter>{selectedFooterActions}</ResidentDocumentsDetailFooter>
         </PortalPageFooterActions>
       ) : null}
     </>

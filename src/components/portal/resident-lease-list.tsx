@@ -1,15 +1,18 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { MANAGER_TABLE_TH } from "@/components/portal/portal-metrics";
 import {
   PORTAL_TABLE_TD,
   PortalDataTableEmpty,
   PortalMobileSummaryCard,
+  PortalTableInlineExpand,
 } from "@/components/portal/portal-data-table";
 import { DocumentsTableShell } from "@/components/portal/documents-table-shell";
 import { usePortalSession } from "@/hooks/use-portal-session";
-import { usePortalNavigate } from "@/lib/portal-nav-client";
+import { portalNavClick, prefetchPortalHref, usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   LEASE_PIPELINE_EVENT,
   findLeaseForResidentEmail,
@@ -124,16 +127,22 @@ export function ResidentLeaseListTable({
   detailHref: (basePath: string, leaseDetailId: string) => string;
   emptyMessage?: string;
 }) {
+  const router = useRouter();
   const navigate = usePortalNavigate();
   const pipelineRow = useResidentLeasePipelineRow();
   const documentRows = useMemo(() => buildResidentLeaseDocumentRows(pipelineRow), [pipelineRow]);
   const propertyLabel = useMemo(() => leaseDocumentPropertyLabel(pipelineRow), [pipelineRow]);
 
+  const leaseDetailPath = useCallback(
+    (entry: ResidentLeaseDocumentRow) => detailHref(basePath, entry.id),
+    [basePath, detailHref],
+  );
+
   const openLease = useCallback(
     (entry: ResidentLeaseDocumentRow) => {
-      navigate(detailHref(basePath, entry.id));
+      navigate(leaseDetailPath(entry));
     },
-    [basePath, detailHref, navigate],
+    [leaseDetailPath, navigate],
   );
 
   if (documentRows.length === 0) {
@@ -151,7 +160,9 @@ export function ResidentLeaseListTable({
           <th className={`${MANAGER_TABLE_TH} text-left`}>Property</th>
         </>
       }
-      rows={documentRows.map((entry) => ({
+      rows={documentRows.map((entry) => {
+        const href = leaseDetailPath(entry);
+        return {
         key: entry.id,
         expanded: false,
         detail: null,
@@ -159,7 +170,17 @@ export function ResidentLeaseListTable({
         cells: (
           <>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <span className="min-w-0 truncate font-medium text-foreground">{entry.label}</span>
+              <Link
+                href={href}
+                className="block min-w-0 text-left"
+                onClick={portalNavClick(router, href)}
+                onMouseEnter={() => prefetchPortalHref(router, href)}
+                onFocus={() => prefetchPortalHref(router, href)}
+              >
+                <PortalTableInlineExpand expanded={false} className="min-w-0 truncate font-medium text-foreground">
+                  <span className="truncate">{entry.label}</span>
+                </PortalTableInlineExpand>
+              </Link>
             </td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>{entry.status}</td>
             <td className={`${PORTAL_TABLE_TD} align-middle`}>
@@ -175,7 +196,8 @@ export function ResidentLeaseListTable({
             onClick={() => openLease(entry)}
           />
         ),
-      }))}
+      };
+      })}
     />
   );
 }

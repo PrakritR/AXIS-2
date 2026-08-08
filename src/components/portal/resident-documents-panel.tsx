@@ -21,9 +21,10 @@ import {
 } from "@/components/portal/resident-other-documents";
 import { ApplicationDocumentPreview, ApplicationPdfDownloadButton } from "@/components/portal/manager-applications";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
-import { RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN } from "@/components/portal/portal-data-table";
+import { RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN, ResidentDocumentsDetailFooter } from "@/components/portal/portal-data-table";
 import { Button } from "@/components/ui/button";
-import { buildResidentLeaseDocumentRows, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
+import { ResidentLeaseListTable } from "@/components/portal/resident-lease-list";
+import { resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { buildReceiptRows, type ReceiptRow } from "@/lib/rent-receipts";
@@ -220,11 +221,13 @@ function ResidentApplicationDocumentDetail({
       dataAttrBack="resident-documents-application-detail-back"
       pinScrollBody
       footer={
-        <ApplicationPdfDownloadButton
-          row={row}
-          label="Download application"
-          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
-        />
+        <ResidentDocumentsDetailFooter>
+          <ApplicationPdfDownloadButton
+            row={row}
+            label="Download application"
+            className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
+          />
+        </ResidentDocumentsDetailFooter>
       }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
@@ -372,15 +375,17 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
       dataAttrBack="resident-documents-lease-detail-back"
       pinScrollBody
       footer={
-        <Button
-          type="button"
-          variant="outline"
-          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
-          data-attr="resident-documents-lease-download-pdf"
-          onClick={() => runLeaseDownload(downloadTarget, showToast)}
-        >
-          {view.pdfSrc ? "Download lease" : "Download / print lease"}
-        </Button>
+        <ResidentDocumentsDetailFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
+            data-attr="resident-documents-lease-download-pdf"
+            onClick={() => runLeaseDownload(downloadTarget, showToast)}
+          >
+            {view.pdfSrc ? "Download lease" : "Download / print lease"}
+          </Button>
+        </ResidentDocumentsDetailFooter>
       }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
@@ -521,15 +526,17 @@ function ResidentReceiptDocumentDetail({ receiptId, basePath }: { receiptId: str
       dataAttrBack="resident-documents-receipt-detail-back"
       pinScrollBody
       footer={
-        <Button
-          type="button"
-          variant="outline"
-          className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
-          data-attr="resident-documents-receipt-download"
-          onClick={() => downloadReceipt(receipt)}
-        >
-          Download receipt
-        </Button>
+        <ResidentDocumentsDetailFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className={RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN}
+            data-attr="resident-documents-receipt-download"
+            onClick={() => downloadReceipt(receipt)}
+          >
+            Download receipt
+          </Button>
+        </ResidentDocumentsDetailFooter>
       }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
@@ -678,53 +685,15 @@ function RentReceiptsTab({ basePath }: { basePath: string }) {
 }
 
 /**
- * Documents › Lease — read-only: the fully signed lease as a downloadable
- * document. Signing, feedback, and uploads live in the standalone Lease tab;
- * none of that is offered here.
+ * Documents › Lease — read-only signed leases; tap a row for the detail page.
+ * Signing and renewals live on the standalone Lease tab.
  */
 function SignedLeaseDocumentsTable({ basePath }: { basePath: string }) {
-  const navigate = usePortalNavigate();
-  const row = useResidentLeaseDocumentSource();
-  const documentRows = useMemo(() => buildResidentLeaseDocumentRows(row), [row]);
-
-  if (documentRows.length === 0) {
-    return <PortalDataTableEmpty icon="lease" message="Your signed lease will appear here once it's signed." />;
-  }
-
   return (
-    <DocumentsTableShell
-      hideColumnHeaders
-      colSpan={3}
-      head={
-        <>
-          <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-          <th className={`${MANAGER_TABLE_TH} text-left`}>Status</th>
-          <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
-        </>
-      }
-      rows={documentRows.map((entry) => ({
-        key: entry.id,
-        expanded: false,
-        detail: null,
-        onToggle: () => navigate(residentDocumentsLeaseDetailHref(basePath, entry.id)),
-        cells: (
-          <>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>
-              <span className="min-w-0 truncate font-medium text-foreground">{entry.label}</span>
-            </td>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>{entry.status}</td>
-            <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(entry.signedAt)}</td>
-          </>
-        ),
-        card: (
-          <PortalMobileSummaryCard
-            title={entry.label}
-            subtitle={entry.status}
-            meta={safeFormatDateTime(entry.signedAt)}
-            onClick={() => navigate(residentDocumentsLeaseDetailHref(basePath, entry.id))}
-          />
-        ),
-      }))}
+    <ResidentLeaseListTable
+      basePath={basePath}
+      detailHref={residentDocumentsLeaseDetailHref}
+      emptyMessage="Your signed lease will appear here once it's signed."
     />
   );
 }

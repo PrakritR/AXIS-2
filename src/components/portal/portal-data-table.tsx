@@ -322,6 +322,11 @@ export const RESIDENT_DOCUMENTS_DETAIL_FOOTER_BTN = cn(
   "h-9 min-h-0 w-auto max-w-none flex-none shrink-0 px-4",
 );
 
+/** Wrap pinned footer actions on resident Documents / Lease detail pages. */
+export function ResidentDocumentsDetailFooter({ children }: { children: ReactNode }) {
+  return <div className="flex w-full flex-wrap items-center justify-start gap-2">{children}</div>;
+}
+
 /**
  * @deprecated Use `Button variant="primary"` with {@link PORTAL_DETAIL_BTN} instead.
  * Emerald styling is reserved for status badges, not action buttons.
