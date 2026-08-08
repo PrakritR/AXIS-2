@@ -40,7 +40,7 @@ describe("residentCreateAccountHref", () => {
         phone: "(206) 555-0100",
         tourInquiryId: "inq-1",
       }),
-    ).toContain("email=alex%40example.com");
+    ).toContain("mode=create");
     expect(
       residentCreateAccountHref("/resident/tour", {
         email: "alex@example.com",
@@ -48,7 +48,8 @@ describe("residentCreateAccountHref", () => {
         phone: "(206) 555-0100",
         tourInquiryId: "inq-1",
       }),
-    ).toContain("name=Alex+Guest");
+    ).toContain("email=alex%40example.com");
+    expect(
     expect(
       residentCreateAccountHref("/resident/tour", {
         email: "alex@example.com",

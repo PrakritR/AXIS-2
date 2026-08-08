@@ -11,15 +11,14 @@ import CreateAccountClient from "./create-account-client";
  * Default path: role-agnostic account creation, then `/auth/get-started` for
  * resident / manager / vendor. Legacy `axis_id` links keep `ResidentSignupBlocked`
  * (emailed setup-token handoff). Manager checkout `session_id` uses CreateAccountClient.
+ * Tour / message prospect handoffs use the same hub create form as generic signup.
  */
 export default function CreateAccountRouter() {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id")?.trim() ?? "";
   const axisId = searchParams.get("axis_id")?.trim() ?? "";
-  const tourInquiryId = searchParams.get("tour_inquiry")?.trim() ?? "";
-  const prospectHandoff = searchParams.get("handoff")?.trim() === "message";
 
-  if (sessionId || tourInquiryId || prospectHandoff) {
+  if (sessionId) {
     return <CreateAccountClient />;
   }
 

@@ -19,10 +19,11 @@ import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox"
 import {
   ProspectAccountHandoff,
   ProspectPublicSuccessBanner,
+  ProspectViewInPortalAction,
   PUBLIC_PROSPECT_CANVAS_CLASS,
 } from "@/components/marketing/prospect-public-handoff";
 import { useProspectContactAutofill, type ProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
-import { completeSignedInTourBooking } from "@/lib/tour-resident-link.client";
+import { linkBookedToursToSignedInResident } from "@/lib/tour-resident-link.client";
 import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import {
@@ -153,6 +154,7 @@ export function TourScheduleFlow({
   } | null>(null);
   const contactAutofill = useProspectContactAutofill();
   const signedInUserId = contactAutofill.userId;
+  const hasResidentRole = contactAutofill.hasResidentRole;
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(
@@ -289,7 +291,18 @@ export function TourScheduleFlow({
             createAccountDataAttr="tour-success-create-account"
             signInDataAttr="tour-success-sign-in"
           />
-        ) : null}
+        ) : (
+          <ProspectViewInPortalAction
+            signedIn
+            hasResidentRole={hasResidentRole}
+            portalPath={
+              submittedContact?.inquiryId
+                ? `/resident/tour?link_tour=${encodeURIComponent(submittedContact.inquiryId)}`
+                : "/resident/tour/pending"
+            }
+            dataAttr="tour-success-view-in-portal"
+          />
+        )}
 
         <div className="flex flex-wrap gap-2">
           <button
@@ -525,20 +538,10 @@ export function TourScheduleFlow({
               const inquiryIds = results
                 .map((item) => item.row?.id?.trim() ?? "")
                 .filter(Boolean);
-              if (signedInUserId) {
-                const completed = await completeSignedInTourBooking(inquiryIds, "/resident/tour/pending");
-                if (completed.ok) {
-                  if (embedded) {
-                    onSuccess();
-                    return;
-                  }
-                  window.location.assign(completed.redirectTo);
-                  return;
-                }
-                showToast(completed.error ?? "Your tour was booked. Open Tours in the resident portal to view it.");
-                if (embedded) {
-                  onSuccess();
-                  return;
+              if (signedInUserId && inquiryIds.length > 0) {
+                const linked = await linkBookedToursToSignedInResident(inquiryIds);
+                if (!linked) {
+                  showToast("Your tour was booked but could not be linked to your account yet.");
                 }
               }
               setSubmitted(true);

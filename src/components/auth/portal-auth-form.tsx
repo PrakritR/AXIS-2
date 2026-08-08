@@ -15,7 +15,11 @@ import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { waitForOAuthUser } from "@/lib/auth/wait-for-oauth-user";
 import { isNativeOAuthInProgress } from "@/lib/native/open-url";
 import { portalNavClick } from "@/lib/portal-nav-client";
-import { residentBrowseFromAuthHref } from "@/lib/resident-public-nav";
+import { residentBrowseFromAuthHref, residentSignInHref } from "@/lib/resident-public-nav";
+import {
+  persistProspectHandoff,
+  prospectHandoffFromSearchParams,
+} from "@/lib/auth/prospect-handoff-storage";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
@@ -104,6 +108,10 @@ export function PortalAuthForm({
   const tourInquiryFromUrl = searchParams.get("tour_inquiry")?.trim() ?? "";
   const handoffFromUrl = searchParams.get("handoff")?.trim() ?? "";
   const prospectHandoff = Boolean(tourInquiryFromUrl) || handoffFromUrl === "message";
+  const prospectHandoffSnapshot = useMemo(
+    () => prospectHandoffFromSearchParams(searchParams),
+    [searchParams],
+  );
   const isCreate = mode === "create";
   const isHub = variant === "hub";
   useAuthWelcomeChrome(isCreate);
@@ -124,6 +132,11 @@ export function PortalAuthForm({
     if (nameFromUrl) setFullName((cur) => cur || nameFromUrl);
     if (phoneFromUrl) setPhone((cur) => cur || phoneFromUrl);
   }, [emailFromUrl, isCreate, nameFromUrl, phoneFromUrl]);
+
+  useEffect(() => {
+    if (!prospectHandoffSnapshot) return;
+    persistProspectHandoff(prospectHandoffSnapshot);
+  }, [prospectHandoffSnapshot]);
 
   useEffect(() => {
     if (isCreate) return;
@@ -246,7 +259,9 @@ export function PortalAuthForm({
         }
         posthog.identify(data.user.id);
         didRedirect = true;
-        window.location.replace(body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/tour");
+        window.location.replace(
+          body.redirectTo?.startsWith("/") ? body.redirectTo : "/resident/tour/pending",
+        );
         return;
       }
 
@@ -294,6 +309,22 @@ export function PortalAuthForm({
     () => portalNavClick(router, browseHomesHref, { preferFullNavigation: true }),
     [browseHomesHref, router],
   );
+
+  const oauthNextPath =
+    nextPath ||
+    (prospectHandoffSnapshot?.nextPath?.startsWith("/") ? prospectHandoffSnapshot.nextPath : "");
+
+  const prospectSignInHref = prospectHandoff
+    ? residentSignInHref(
+        oauthNextPath || "/resident/tour/pending",
+        {
+          tourInquiryId: tourInquiryFromUrl || undefined,
+          email: emailFromUrl || undefined,
+          fullName: nameFromUrl || undefined,
+          phone: phoneFromUrl || undefined,
+        },
+      )
+    : "/auth/sign-in";
 
   const stackClassName = `native-auth-hub-stack mx-auto w-full self-center ${isHub && isCreate ? "max-w-[52rem]" : "max-w-[460px]"}`;
 
@@ -405,11 +436,25 @@ export function PortalAuthForm({
 
             <div className="space-y-3">
               <OAuthSocialStack
-                nextPath={nextPath}
+                nextPath={oauthNextPath}
                 disabled={busy}
+                intent={prospectHandoff ? "resident" : null}
+                viaContinue={!prospectHandoff}
+                fixedCallbackPath={prospectHandoff ? "/auth/callback/resident-signup" : undefined}
+                onBeforeRedirect={
+                  prospectHandoffSnapshot
+                    ? () => persistProspectHandoff(prospectHandoffSnapshot)
+                    : undefined
+                }
                 onError={(message) => setErrorText(message || null)}
               />
-              <AuthDivider label="or enter your details" />
+              <AuthDivider
+                label={
+                  prospectHandoff
+                    ? "or enter the same details you used on your tour"
+                    : "or enter your details"
+                }
+              />
               {hubFields}
               {errorText ? <p className="text-center text-xs text-rose-600">{errorText}</p> : null}
               <Button
@@ -428,7 +473,11 @@ export function PortalAuthForm({
         <div className="native-auth-hub-footer relative z-10 mt-5 space-y-3 text-center text-[12px]">
           <p className="text-muted">
             Already have an account?{" "}
-            <Link className="font-semibold text-primary hover:opacity-90" href="/auth/sign-in" data-attr="auth-hub-sign-in">
+            <Link
+              className="font-semibold text-primary hover:opacity-90"
+              href={prospectSignInHref}
+              data-attr="auth-hub-sign-in"
+            >
               Sign in
             </Link>
           </p>
