@@ -68,8 +68,7 @@ export function readPromotionTextEntries(row: {
   textCopies?: PromotionTextEntry[];
 }): PromotionTextEntry[] {
   if (Array.isArray(row.textCopies)) {
-    const entries = row.textCopies.filter(isPromotionTextEntry).filter((e) => e.copy.body.trim());
-    if (entries.length > 0) return entries;
+    return row.textCopies.filter(isPromotionTextEntry).filter((e) => e.copy.body.trim());
   }
   if (row.textCopy?.body?.trim()) {
     const now = new Date().toISOString();

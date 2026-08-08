@@ -646,11 +646,6 @@ export function ManagerPromotion({
     return stored.trim() || promotionAssetListTitle(detailAsset, indexWithinKind);
   }, [detailAsset, assets]);
 
-  const editingFlyerAsset =
-    editingRowId && editingEntryId
-      ? assets.find((a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId) ?? null
-      : null;
-
   function deleteAsset(asset: PromotionAsset) {
     if (asset.kind === "flyer" && asset.flyerEntry) {
       const next = removeFlyerEntryFromRow(asset.row, asset.flyerEntry.id);
@@ -679,8 +674,12 @@ export function ManagerPromotion({
   }
 
   function handleDeleteFromFlyerModal() {
-    if (!editingFlyerAsset) return;
-    handleDeleteAsset(editingFlyerAsset);
+    if (!editingRowId || !editingEntryId) return;
+    const asset = assets.find(
+      (a) => a.row.id === editingRowId && promotionEntryId(a) === editingEntryId,
+    );
+    if (!asset) return;
+    handleDeleteAsset(asset);
   }
 
   const promotionModals = (
