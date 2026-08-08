@@ -11,8 +11,7 @@ import {
   buildSmsDeepLink,
   isClawMessagingPubliclyEnabled,
 } from "@/lib/claw-leasing-links";
-import { buildTourContactHref } from "@/lib/manager-property-links";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { useProspectListingHrefs } from "@/hooks/use-prospect-listing-hrefs";
 
 function useLeasingLabels(contactSmsPhone: string | null | undefined) {
   const textEnabled = isClawMessagingPubliclyEnabled(contactSmsPhone);
@@ -40,6 +39,7 @@ export function ListingBathroomMediaBrowser({
 }) {
   const { textEnabled, applyLabel, messageLabel } = useLeasingLabels(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
+  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
   const entries = useMemo(
     () =>
       [...bathroomMediaEntries(rows)].sort((a, b) =>
@@ -58,7 +58,7 @@ export function ListingBathroomMediaBrowser({
           topic: row?.name ?? "this bathroom",
           toPhone: contactSmsPhone,
         })
-      : buildTourContactHref(listingPropertyId);
+      : webMessageHref;
     return { kind: "link", href, label: messageLabel, dataAttr: "listing-bathroom-browser-message" };
   };
 
@@ -79,7 +79,7 @@ export function ListingBathroomMediaBrowser({
           propertyLabel: label,
           toPhone: contactSmsPhone,
         })
-      : buildRentalApplyHref({ propertyId: listingPropertyId });
+      : webApplyHref;
     return { kind: "link", href, label: applyLabel, dataAttr: "listing-bathroom-browser-apply" };
   };
 
@@ -126,6 +126,7 @@ export function ListingSharedMediaBrowser({
 }) {
   const { textEnabled, applyLabel, messageLabel } = useLeasingLabels(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
+  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
   const entries = useMemo(
     () =>
       [...sharedSpaceMediaEntries(rows)].sort((a, b) =>
@@ -142,7 +143,7 @@ export function ListingSharedMediaBrowser({
           propertyLabel: label,
           toPhone: contactSmsPhone,
         })
-      : buildRentalApplyHref({ propertyId: listingPropertyId });
+      : webApplyHref;
     return { kind: "link", href, label: applyLabel, dataAttr: "listing-shared-browser-apply" };
   };
 
@@ -163,7 +164,7 @@ export function ListingSharedMediaBrowser({
           propertyLabel: label,
           toPhone: contactSmsPhone,
         })
-      : buildTourContactHref(listingPropertyId);
+      : webMessageHref;
     return { kind: "link", href, label: messageLabel, dataAttr: "listing-shared-browser-message" };
   };
 

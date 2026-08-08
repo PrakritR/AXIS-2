@@ -59,6 +59,23 @@ export function residentLeaseManagerMessageDraft(
   };
 }
 
+export function residentListingManagerMessageDraft(propertyId: string): {
+  subject: string;
+  body: string;
+  managerUserId?: string;
+  propertyId?: string;
+  propertyTitle?: string;
+} {
+  const pid = propertyId.trim();
+  const propertyTitle = (pid ? getPropertyById(pid)?.title?.trim() : "") || "this listing";
+  return {
+    subject: `Question about ${propertyTitle}`,
+    body: `Hi,\n\nI have a question about ${propertyTitle}.\n\n`,
+    propertyId: pid || undefined,
+    propertyTitle,
+  };
+}
+
 export function residentChargeManagerMessageDraft(charge: HouseholdCharge): {
   subject: string;
   body: string;

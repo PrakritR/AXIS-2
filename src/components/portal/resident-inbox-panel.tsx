@@ -1,6 +1,7 @@
 "use client";
 
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { Button } from "@/components/ui/button";
 import { ScopedInboxComposeModal, type ScopedInboxSendPayload } from "@/components/portal/inbox-scoped-compose-modal";
@@ -58,6 +59,7 @@ import {
   consumeResidentComposePrefill,
   type ResidentComposePrefill,
 } from "@/lib/resident-compose-prefill";
+import { residentListingManagerMessageDraft } from "@/lib/resident-manager-message-draft";
 import {
   INBOX_MAX_ATTACHMENTS,
   attachmentMetaFromUrls,
@@ -194,6 +196,7 @@ export const ResidentInboxPanel = forwardRef<
   const { showToast } = useAppUi();
   const session = usePortalSession();
   const navigate = usePortalNavigate();
+  const searchParams = useSearchParams();
   const [local, setLocal] = useState<InboxThread[]>(
     () => loadPersistedInbox(RESIDENT_INBOX_STORAGE_KEY, RESIDENT_INBOX_THREAD_FALLBACK) as InboxThread[],
   );
@@ -289,10 +292,16 @@ export const ResidentInboxPanel = forwardRef<
 
   useEffect(() => {
     const prefill = consumeResidentComposePrefill();
-    if (!prefill) return;
-    setComposeDraft(prefill);
+    if (prefill) {
+      setComposeDraft(prefill);
+      setComposeOpen(true);
+      return;
+    }
+    const propertyId = searchParams.get("propertyId")?.trim() ?? "";
+    if (searchParams.get("compose") !== "1" || !propertyId) return;
+    setComposeDraft(residentListingManagerMessageDraft(propertyId));
     setComposeOpen(true);
-  }, []);
+  }, [searchParams]);
 
   useEffect(() => {
     if (tabId !== "schedule") return;

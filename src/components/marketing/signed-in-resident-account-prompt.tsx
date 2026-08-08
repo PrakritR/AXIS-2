@@ -1,18 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { markPublicApplyGuestContinue } from "@/lib/rental-application/public-apply-session";
+import { residentCreateAccountHref } from "@/lib/resident-public-nav";
+import { useProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
 
 /**
  * Shown on the PUBLIC apply surface when the visitor is signed in but does NOT
- * hold the resident role (a manager or vendor). Per the account model, they
- * create a SEPARATE resident account — additively, on the same login and email —
- * and then apply from inside the resident portal.
- *
- * This is a DISTINCT surface from the anonymous "Before you apply" gate
- * (`public-apply-account-prompt.tsx`), which another lane owns; do not merge the
- * two. Guest apply remains available here for anyone who wants no account.
+ * hold the resident role (a manager or vendor).
  */
 export function SignedInResidentAccountPrompt({
   gateKey,
@@ -25,34 +21,13 @@ export function SignedInResidentAccountPrompt({
   propertyTitle?: string;
   onContinueGuest: () => void;
 }) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
+  const autofill = useProspectContactAutofill();
   const listing = propertyTitle?.trim() || "this home";
-
-  const createResidentAccount = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch("/api/auth/create-resident-account", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-      });
-      const body = (await res.json().catch(() => ({}))) as { redirectTo?: string; error?: string };
-      if (!res.ok) {
-        setError(body.error || "Could not create your resident account. Please try again.");
-        setBusy(false);
-        return;
-      }
-      const returnPath = applyReturnPath.trim();
-      // Full navigation so the freshly-set active-portal cookie and the new
-      // resident role are re-read by the resident portal's server guard.
-      window.location.assign(returnPath || body.redirectTo || "/resident/applications/apply");
-    } catch {
-      setError("Could not create your resident account. Please try again.");
-      setBusy(false);
-    }
-  };
+  const createHref = residentCreateAccountHref(applyReturnPath, {
+    email: autofill.email || undefined,
+    fullName: autofill.name || undefined,
+    phone: autofill.phone || undefined,
+  });
 
   return (
     <div className="mx-auto w-full max-w-3xl py-2 sm:py-4">
@@ -61,31 +36,22 @@ export function SignedInResidentAccountPrompt({
         Create your resident account to apply
       </h2>
       <p className="mt-2 text-sm leading-relaxed text-muted">
-        To rent {listing}, we&apos;ll set up a separate resident account on your existing login: same email, no new
-        password, and its own resident portal kept separate from your current account. Switch between them anytime
-        without signing out.
+        To rent {listing}, add a separate resident account on your existing login — same email, no new password, and
+        its own resident portal kept separate from your current account.
       </p>
-      {error ? (
-        <p className="mt-3 text-sm font-medium text-danger" role="alert">
-          {error}
-        </p>
-      ) : null}
-      <div className="mt-4 space-y-2.5">
-        <Button
-          type="button"
-          className="min-h-[44px] w-full rounded-full text-[15px] font-semibold"
+      <div className="mt-4 flex flex-wrap gap-2.5">
+        <Link
+          href={createHref}
+          className="btn-cobalt inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center rounded-full px-5 text-[15px] font-semibold sm:px-6"
           data-attr="signed-in-create-resident-account"
-          disabled={busy}
-          onClick={() => createResidentAccount()}
         >
-          {busy ? "Creating…" : "Create resident account & apply"}
-        </Button>
+          Create resident account
+        </Link>
         <Button
           type="button"
           variant="outline"
-          className="min-h-[44px] w-full rounded-full text-[15px] font-semibold"
+          className="min-h-[44px] min-w-0 flex-1 rounded-full px-5 text-[15px] font-semibold sm:px-6"
           data-attr="signed-in-apply-as-guest"
-          disabled={busy}
           onClick={() => {
             markPublicApplyGuestContinue(gateKey);
             onContinueGuest();

@@ -7,7 +7,7 @@ import { ListingDetailSections } from "@/components/marketing/listing-detail-sec
 import { getListingRichContent } from "@/data/listing-rich-content";
 import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import { getPropertyForPublicLink } from "@/lib/rental-application/data";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { useProspectListingHrefs } from "@/hooks/use-prospect-listing-hrefs";
 
 export function PublicListingPageClient() {
   const params = useParams();
@@ -56,6 +56,7 @@ export function PublicListingPageClient() {
   }, [listingId, tick]);
 
   const rich = useMemo(() => (property ? getListingRichContent(property) : null), [property]);
+  const { applyHref } = useProspectListingHrefs(listingId);
 
   if (loading) {
     return (
@@ -82,7 +83,7 @@ export function PublicListingPageClient() {
           </Link>
           {listingId ? (
             <Link
-              href={buildRentalApplyHref({ propertyId: listingId })}
+              href={applyHref}
               className="rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:opacity-90"
             >
               Try apply link

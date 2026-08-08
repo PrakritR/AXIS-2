@@ -100,7 +100,7 @@ export function publicApplySignInHref(gateKey: string, returnPath?: string): str
  */
 export function publicApplyCreateAccountHref(gateKey: string, returnPath?: string): string {
   const next = returnPath?.trim() || publicApplyNext(gateKey);
-  return `/auth/create-account?role=resident&next=${encodeURIComponent(next)}`;
+  return `/auth/create-account?mode=create&role=resident&next=${encodeURIComponent(next)}`;
 }
 
 export type PublicApplyView = "account-prompt" | "signed-in-create-resident" | "wizard";

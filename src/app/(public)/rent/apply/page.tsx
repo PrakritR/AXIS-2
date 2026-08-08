@@ -26,7 +26,7 @@ export default async function ApplyPage({
   );
 
   const ctx = await getPortalAccessContext();
-  if (ctx.user && (hasRole(ctx, "resident") || hasPropertyLink)) {
+  if (ctx.user && hasRole(ctx, "resident")) {
     redirect(applyPath);
   }
 

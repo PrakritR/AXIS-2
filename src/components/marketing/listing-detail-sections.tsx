@@ -24,8 +24,7 @@ import {
   ListingPreviewNewTabContext,
 } from "@/components/marketing/listing-preview-context";
 import { buildSmsDeepLink, isClawMessagingPubliclyEnabled } from "@/lib/claw-leasing-links";
-import { buildTourContactHref } from "@/lib/manager-property-links";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { ProspectListingCta } from "@/components/marketing/prospect-listing-cta";
 import type { MockProperty } from "@/data/types";
 import { DEFAULT_LISTING_HOUSE_RULES_FALLBACK, type ListingRichContent } from "@/data/listing-rich-content";
 import { NoImagePlaceholder } from "@/components/ui/no-image-placeholder";
@@ -212,41 +211,39 @@ function ListingPricingCtaCard({
             Text to tour
           </a>
         ) : (
-          <Link
-            href={buildTourContactHref(property.id)}
+          <ProspectListingCta
+            action="tour"
+            propertyId={property.id}
             data-attr="listing-web-tour"
             className={`${primaryCtaClass} min-h-[48px] mt-0`}
           >
             Schedule a tour
-          </Link>
+          </ProspectListingCta>
         )}
         {textApplyHref ? (
           <a href={textApplyHref} data-attr="listing-text-apply" className={secondaryCtaClass}>
             Text to apply
           </a>
         ) : (
-          <Link
-            href={buildRentalApplyHref({ propertyId: property.id })}
+          <ProspectListingCta
+            action="apply"
+            propertyId={property.id}
             data-attr="listing-web-apply"
             className={secondaryCtaClass}
           >
             Apply online
-          </Link>
+          </ProspectListingCta>
         )}
         {textTourHref || textApplyHref ? (
           <p className="mt-3 text-center text-xs text-muted">
             No texting on this device?{" "}
-            <Link href={buildTourContactHref(property.id)} className="underline underline-offset-2" data-attr="listing-web-tour-fallback">
+            <ProspectListingCta action="tour" propertyId={property.id} className="underline underline-offset-2" data-attr="listing-web-tour-fallback">
               Schedule a tour
-            </Link>{" "}
+            </ProspectListingCta>{" "}
             or{" "}
-            <Link
-              href={buildRentalApplyHref({ propertyId: property.id })}
-              className="underline underline-offset-2"
-              data-attr="listing-web-apply-fallback"
-            >
+            <ProspectListingCta action="apply" propertyId={property.id} className="underline underline-offset-2" data-attr="listing-web-apply-fallback">
               apply online
-            </Link>
+            </ProspectListingCta>
             .
           </p>
         ) : null}

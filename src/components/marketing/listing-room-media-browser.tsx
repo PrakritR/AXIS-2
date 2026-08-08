@@ -10,8 +10,10 @@ import {
   buildSmsDeepLink,
   isClawMessagingPubliclyEnabled,
 } from "@/lib/claw-leasing-links";
-import { buildTourContactHref } from "@/lib/manager-property-links";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { useProspectListingHrefs } from "@/hooks/use-prospect-listing-hrefs";
+import { buildProspectApplyHref } from "@/lib/prospect-public-nav";
+import { useProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
 
 export type ListingRoomMediaEntry = {
   room: ListingRoomRow;
@@ -37,6 +39,13 @@ export function ListingRoomMediaBrowser({
   const label = propertyLabel?.trim() || null;
   const applyLabel = textEnabled ? "Text to apply" : "Apply online";
   const messageLabel = textEnabled ? "Text a message" : "Contact leasing";
+  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
+  const autofill = useProspectContactAutofill();
+  const auth = {
+    ready: autofill.ready,
+    userId: autofill.userId,
+    hasResidentRole: autofill.hasResidentRole,
+  };
 
   const mediaEntries = useMemo(
     () =>
@@ -59,7 +68,7 @@ export function ListingRoomMediaBrowser({
     if (!room) {
       return {
         kind: "link",
-        href: buildRentalApplyHref({ propertyId: listingPropertyId }),
+        href: webApplyHref,
         label: applyLabel,
         dataAttr: "listing-room-browser-apply",
       };
@@ -72,13 +81,16 @@ export function ListingRoomMediaBrowser({
           roomName: room.name,
           toPhone: contactSmsPhone,
         })
-      : buildRentalApplyHref({
-          propertyId: listingPropertyId,
-          listingRoomId: room.id,
-          listingRoomName: room.name,
-          floorLabel: entry.floorLabel,
-          roomPrice: room.price,
-        });
+      : buildProspectApplyHref(
+          {
+            propertyId: listingPropertyId,
+            listingRoomId: room.id,
+            listingRoomName: room.name,
+            floorLabel: entry.floorLabel,
+            roomPrice: room.price,
+          },
+          auth,
+        );
     return { kind: "link", href, label: applyLabel, dataAttr: "listing-room-browser-apply" };
   };
 
@@ -100,7 +112,7 @@ export function ListingRoomMediaBrowser({
           roomName: entry?.room.name,
           toPhone: contactSmsPhone,
         })
-      : buildTourContactHref(listingPropertyId);
+      : webMessageHref;
     return { kind: "link", href, label: messageLabel, dataAttr: "listing-room-browser-message" };
   };
 

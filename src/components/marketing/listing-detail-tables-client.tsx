@@ -21,8 +21,7 @@ import {
   buildSmsDeepLink,
   isClawMessagingPubliclyEnabled,
 } from "@/lib/claw-leasing-links";
-import { buildTourContactHref } from "@/lib/manager-property-links";
-import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
+import { useProspectListingHrefs } from "@/hooks/use-prospect-listing-hrefs";
 import { getRoomUnavailabilityWindows, LISTING_ROOM_CHOICE_SEP, type RoomUnavailabilityWindow } from "@/lib/rental-application/data";
 import { roomAvailabilityPillClasses, roomAvailabilityTone } from "@/lib/room-availability-style";
 import { formatRoomPriceAmount } from "@/lib/room-pricing";
@@ -495,20 +494,17 @@ export function ListingDetailModal({
   const newTabProps = listingLinkTargetProps(useListingPreviewNewTab());
   const textEnabled = isClawMessagingPubliclyEnabled(contactSmsPhone);
   const label = propertyLabel?.trim() || null;
-  // Flag off (or no SMS handler on this device) → web apply / tour-contact
-  // flows instead of dead "#" anchors.
-  const webApplyHref = buildRentalApplyHref({ propertyId: listingPropertyId });
-  const webContactHref = buildTourContactHref(listingPropertyId);
+  const { applyHref: webApplyHref, messageHref: webMessageHref } = useProspectListingHrefs(listingPropertyId);
   const textApplyHref = textEnabled
     ? buildSmsDeepLink({ intent: "apply", propertyId: listingPropertyId, propertyLabel: label, toPhone: contactSmsPhone })
     : webApplyHref;
   const textMessageHref = textEnabled
     ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, toPhone: contactSmsPhone })
-    : webContactHref;
+    : webMessageHref;
   const textMessageAbout = (topic: string) =>
     textEnabled
       ? buildSmsDeepLink({ intent: "question", propertyId: listingPropertyId, propertyLabel: label, topic, toPhone: contactSmsPhone })
-      : webContactHref;
+      : webMessageHref;
   const applyLabel = textEnabled ? "Text to apply" : "Apply online";
   const messageLabel = textEnabled ? "Text a message" : "Contact leasing";
 

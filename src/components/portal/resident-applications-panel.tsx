@@ -900,7 +900,7 @@ export function ResidentApplicationsPanel({
       layout="embedded"
       exitPath={`${RESIDENT_PORTAL_BASE_PATH}/applications`}
       sessionEmail={sessionEmail ?? undefined}
-      linkedPropertyId={demoApplyPropertyId}
+      linkedPropertyId={applyTarget?.propertyId ?? demoApplyPropertyId}
     />
   );
 
@@ -1347,6 +1347,22 @@ export function ResidentApplicationsPanel({
   }
 
   if (!applicationIdProp && applyMode) {
+    if (applyTarget && applyView === "wizard" && !activeInProgressRow) {
+      return (
+        <ManagerPortalPageShell title="Apply" hideTitleOnMobileNav compactFilterRow>
+          <div className={PORTAL_DATA_TABLE_WRAP}>
+            {!sessionReady ? (
+              <div className="flex items-center justify-center px-6 py-16 text-sm text-muted">Loading application…</div>
+            ) : (
+              embeddedWizard
+            )}
+          </div>
+          {withdrawModal}
+          {propertyPickerModal}
+        </ManagerPortalPageShell>
+      );
+    }
+
     return (
       <ManagerPortalPageShell
         title="Applications"

@@ -76,17 +76,17 @@ export function PublicApplyAccountPrompt({
         application, messages, and payments. Already have an account? Sign in. Or apply as a guest and we&apos;ll email
         setup instructions to the address you use.
       </p>
-      <div className="mt-4 space-y-2.5">
+      <div className="mt-4 flex flex-wrap gap-2.5">
         <Link
           href={publicApplyCreateAccountHref(gateKey, applyReturnPath)}
-          className="btn-cobalt inline-flex min-h-[44px] w-full items-center justify-center rounded-full px-6 text-[15px] font-semibold"
+          className="btn-cobalt inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center rounded-full px-5 text-[15px] font-semibold sm:px-6"
           data-attr="public-apply-create-account"
         >
           Create account
         </Link>
         <Link
           href={publicApplySignInHref(gateKey, applyReturnPath)}
-          className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border px-6 text-[15px] font-semibold text-foreground"
+          className="inline-flex min-h-[44px] min-w-0 flex-1 items-center justify-center rounded-full border border-border px-5 text-[15px] font-semibold text-foreground sm:px-6"
           data-attr="public-apply-sign-in"
         >
           Sign in
