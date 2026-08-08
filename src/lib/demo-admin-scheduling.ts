@@ -825,7 +825,10 @@ function deletePartnerInquiryLocally(row: PartnerInquiry): boolean {
   return true;
 }
 
-async function deleteTourInquiryFromServer(row: PartnerInquiry): Promise<boolean> {
+async function deleteTourInquiryFromServer(
+  row: PartnerInquiry,
+  opts?: { notifyTenant?: boolean; subject?: string; body?: string },
+): Promise<boolean> {
   const selectedWindow = getPartnerInquiryWindows(row)[0];
   const res = await fetch("/api/portal-tour-inquiries/delete", {
     method: "POST",
@@ -836,15 +839,21 @@ async function deleteTourInquiryFromServer(row: PartnerInquiry): Promise<boolean
       managerUserId: row.managerUserId ?? selectedWindow?.adminUserId,
       start: selectedWindow?.start ?? row.proposedStart,
       end: selectedWindow?.end ?? row.proposedEnd,
+      notifyTenant: opts?.notifyTenant !== false,
+      subject: opts?.subject,
+      body: opts?.body,
     }),
   });
   return res.ok;
 }
 
-export async function deletePartnerInquiryFromServer(id: string): Promise<boolean> {
+export async function deletePartnerInquiryFromServer(
+  id: string,
+  opts?: { notifyTenant?: boolean; subject?: string; body?: string },
+): Promise<boolean> {
   const row = readPartnerInquiries().find((r) => r.id === id);
   if (!row) return false;
-  if (row.kind === "tour" && !(await deleteTourInquiryFromServer(row))) return false;
+  if (row.kind === "tour" && !(await deleteTourInquiryFromServer(row, opts))) return false;
   if (!deletePartnerInquiryLocally(row)) return false;
   if (row.kind === "tour") return true;
   const [inquiriesOk, eventRecordsOk] = await Promise.all([

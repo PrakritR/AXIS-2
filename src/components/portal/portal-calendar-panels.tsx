@@ -16,8 +16,10 @@ import { formatTourContactPhoneDisplay } from "@/lib/tour-contact-quality";
 import { getPropertyById } from "@/lib/rental-application/data";
 import {
   TOUR_CONFIRMED_TENANT_SUBJECT,
+  TOUR_REQUEST_REMOVED_TENANT_SUBJECT,
   buildTourConfirmedTenantBody,
   buildTourNotificationContext,
+  buildTourRequestRemovedTenantBody,
 } from "@/lib/tour-notifications";
 import {
   DEFAULT_EVENT_DURATION_MINUTES,
@@ -428,6 +430,11 @@ export function PortalCalendarPanels({
     subject: string;
     body: string;
   } | null>(null);
+  const [tourDeletePreview, setTourDeletePreview] = useState<{
+    meeting: DemoMeeting;
+    subject: string;
+    body: string;
+  } | null>(null);
   const [tourConfirmBusy, setTourConfirmBusy] = useState(false);
   /**
    * The guest has already been emailed "Your PropLane tour is confirmed", so
@@ -713,6 +720,72 @@ export function PortalCalendarPanels({
     }
   }, [onMeetingsChanged, reloadAvailability, showToast, tourConfirmBusy, tourConfirmPreview]);
 
+  const openTourDeletePreview = useCallback(() => {
+    if (selectedBlock?.kind !== "meeting" || selectedBlock.meeting.source !== "inquiry") return;
+    const meeting = selectedBlock.meeting;
+    if (meeting.kind !== "tour") {
+      setPendingTourAction("delete");
+      return;
+    }
+    if (!meeting.email?.trim()) {
+      showToast("Guest email is required before deleting this tour.");
+      setPendingTourAction("delete");
+      return;
+    }
+    const property = meeting.propertyId ? getPropertyById(meeting.propertyId) : undefined;
+    const ctx = buildTourNotificationContext({
+      origin: typeof window !== "undefined" ? window.location.origin : "",
+      guestName: meeting.name || "Guest",
+      guestEmail: meeting.email,
+      guestPhone: meeting.phone || null,
+      propertyId: meeting.propertyId || null,
+      propertyTitle: meeting.propertyTitle || property?.title || "Property",
+      propertyAddress: property?.address || null,
+      roomLabel: meeting.roomLabel || null,
+      tourStartIso: meeting.startIso,
+      tourEndIso: meeting.endIso,
+      notes: meeting.notes || null,
+      managerLabel: scheduleOwnerLabel || null,
+    });
+    setTourDeletePreview({
+      meeting,
+      subject: TOUR_REQUEST_REMOVED_TENANT_SUBJECT,
+      body: buildTourRequestRemovedTenantBody(ctx),
+    });
+    setPendingTourAction(null);
+  }, [scheduleOwnerLabel, selectedBlock, showToast]);
+
+  const confirmTourDeleteWithNotification = useCallback(
+    async (skipMessage: boolean, _channels?: unknown, draft?: { subject?: string; body?: string }) => {
+      if (!tourDeletePreview || tourActionBusy) return;
+      const { meeting } = tourDeletePreview;
+      setTourActionBusy(true);
+      try {
+        const ok = await deletePartnerInquiryFromServer(meeting.sourceId, {
+          notifyTenant: !skipMessage,
+          subject: draft?.subject,
+          body: draft?.body,
+        });
+        if (!ok) {
+          showToast("Could not delete this tour.");
+          return;
+        }
+        setTourDeletePreview(null);
+        setSelectedBlock(null);
+        setPendingTourAction(null);
+        setMeetingRefresh((n) => n + 1);
+        onMeetingsChanged?.();
+        reloadAvailability();
+        showToast(
+          skipMessage ? "Tour removed (no guest notification sent)." : "Tour removed and guest notified.",
+        );
+      } finally {
+        setTourActionBusy(false);
+      }
+    },
+    [onMeetingsChanged, reloadAvailability, showToast, tourActionBusy, tourDeletePreview],
+  );
+
   const deleteSelectedMeeting = useCallback(async () => {
     if (selectedBlock?.kind !== "meeting") return;
     const meeting = selectedBlock.meeting;
@@ -732,7 +805,7 @@ export function PortalCalendarPanels({
       }
       ok = await deletePlannedEventFromServer(meeting.sourceId);
     } else {
-      ok = await deletePartnerInquiryFromServer(meeting.sourceId);
+      ok = await deletePartnerInquiryFromServer(meeting.sourceId, { notifyTenant: false });
     }
     if (ok) {
       setSelectedBlock(null);
@@ -1172,13 +1245,15 @@ export function PortalCalendarPanels({
     selectedBlock?.kind === "meeting" &&
     (selectedBlock.meeting.source === "planned" || isPropPlaneGoogleTourMeeting(selectedBlock.meeting))
       ? "Delete event"
-      : "Delete request";
+      : selectedBlock?.kind === "meeting" && selectedBlock.meeting.kind === "tour"
+        ? "Delete tour"
+        : "Delete request";
 
   const selectedKeepLabel = selectedIsGuestFacingTour
     ? "Keep tour"
     : selectedDeleteLabel === "Delete event"
       ? "Keep event"
-      : "Keep request";
+      : "Keep tour";
 
   const openGuestMessageThread = useCallback(
     (email?: string | null) => {
@@ -1555,24 +1630,16 @@ export function PortalCalendarPanels({
             </div>
           ) : null}
 
-          {pendingTourAction === "delete" ? (
+          {pendingTourAction === "delete" && !selectedIsPendingTourInquiry ? (
             <div className="rounded-2xl border px-4 py-3 text-sm portal-banner-pending" data-attr="tour-delete-confirm">
               <p className="font-semibold text-foreground">
-                {selectedIsPendingTourInquiry
-                  ? "Delete this tour request and tell the guest?"
-                  : selectedIsGuestFacingTour
-                    ? "Delete without telling the guest?"
-                    : "Delete this event?"}
+                {selectedIsGuestFacingTour ? "Delete without telling the guest?" : "Delete this event?"}
               </p>
               <p className="mt-1 text-xs text-muted">
-                {selectedIsPendingTourInquiry
-                  ? selectedBlock.meeting.email
-                    ? `${selectedBlock.meeting.email} will receive an inbox message and email that this tour request was removed.`
-                    : "This tour request has no guest email on file, so nobody can be notified."
-                  : selectedIsGuestFacingTour
-                    ? "This removes the event from your calendar and sends nothing."
-                    : "This removes the event from your calendar. It cannot be undone."}
-                {selectedTourGuestAlreadyTold && !selectedIsPendingTourInquiry
+                {selectedIsGuestFacingTour
+                  ? "This removes the event from your calendar and sends nothing."
+                  : "This removes the event from your calendar. It cannot be undone."}
+                {selectedTourGuestAlreadyTold
                   ? " The guest was already told this tour is confirmed, so they will still expect it. Use Cancel tour instead unless you have already reached them."
                   : ""}
               </p>
@@ -1625,9 +1692,7 @@ export function PortalCalendarPanels({
                 >
                   {pendingTourAction === "cancel"
                     ? "Cancel tour & notify"
-                    : selectedIsPendingTourInquiry
-                      ? "Delete request & notify"
-                      : selectedDeleteLabel}
+                    : selectedDeleteLabel}
                 </Button>
               </>
             ) : (
@@ -1670,7 +1735,9 @@ export function PortalCalendarPanels({
               variant="outline"
               className="h-9 shrink-0 whitespace-nowrap rounded-full border-rose-200 px-4 text-xs text-rose-800 hover:bg-[var(--status-overdue-bg)] sm:h-10 sm:px-5 sm:text-sm"
               data-attr="tour-delete-open"
-              onClick={() => setPendingTourAction("delete")}
+              onClick={() =>
+                selectedIsPendingTourInquiry ? openTourDeletePreview() : setPendingTourAction("delete")
+              }
             >
               {selectedDeleteLabel}
             </Button>
@@ -1749,6 +1816,29 @@ export function PortalCalendarPanels({
       confirmBusyLabel="Confirming…"
       panelClassName="z-[90] max-w-xl"
       onConfirm={(skipMessage) => void confirmTourWithNotification(skipMessage)}
+    />
+  );
+
+  const tourDeletePreviewModal = (
+    <PortalNotificationPreviewModal
+      open={tourDeletePreview !== null}
+      title="Delete tour — guest notification preview"
+      onClose={() => setTourDeletePreview(null)}
+      recipient={tourDeletePreview?.meeting.email ?? ""}
+      subject={tourDeletePreview?.subject ?? ""}
+      body={tourDeletePreview?.body ?? ""}
+      intro="Deleting removes this tour request from your calendar and sends this message to the guest."
+      skipMessageLabel="Delete tour without messaging guest"
+      showChannelPicker={false}
+      emailAvailable={Boolean(tourDeletePreview?.meeting.email?.includes("@"))}
+      smsAvailable={false}
+      showSchedule={false}
+      confirmLabel="Delete tour & send notification"
+      confirmLabelWithoutMessage="Delete tour only"
+      confirmBusy={tourActionBusy}
+      confirmBusyLabel="Deleting…"
+      panelClassName="z-[90] max-w-xl"
+      onConfirm={(skipMessage, _channels, draft) => void confirmTourDeleteWithNotification(skipMessage, _channels, draft)}
     />
   );
 
@@ -2334,6 +2424,7 @@ export function PortalCalendarPanels({
         ) : null}
         {selectedBlockModal}
         {tourConfirmPreviewModal}
+        {tourDeletePreviewModal}
       </>
     );
   }
@@ -2728,6 +2819,7 @@ export function PortalCalendarPanels({
       </Modal>
       {selectedBlockModal}
       {tourConfirmPreviewModal}
+      {tourDeletePreviewModal}
     </>
   );
 }

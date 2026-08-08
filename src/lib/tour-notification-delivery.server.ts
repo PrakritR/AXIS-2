@@ -433,6 +433,7 @@ export async function notifyTenantTourRequestRemoved(
   req: Request,
   inquiry: TourInquiryPayload,
   window?: { start: string; end: string },
+  opts?: { subject?: string; body?: string },
 ): Promise<{ ok: boolean; skipped?: boolean; error?: string }> {
   const row = inquiry as Record<string, unknown>;
   const guestEmail = textField(row, "email");
@@ -461,8 +462,8 @@ export async function notifyTenantTourRequestRemoved(
     tourInquiryId: textField(row, "id") || null,
   });
 
-  const subject = TOUR_REQUEST_REMOVED_TENANT_SUBJECT;
-  const text = buildTourRequestRemovedTenantBody(ctx);
+  const subject = opts?.subject?.trim() || TOUR_REQUEST_REMOVED_TENANT_SUBJECT;
+  const text = opts?.body?.trim() || buildTourRequestRemovedTenantBody(ctx);
   const managerUserId = textField(row, "managerUserId");
 
   await recordResidentProspectInboxMessage(db, {

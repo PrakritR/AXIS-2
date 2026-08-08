@@ -101,4 +101,15 @@ describe("POST /api/portal-tour-inquiries/delete", () => {
     expect(remaining.some((row) => row.id === "inq-victim")).toBe(true);
     expect(remaining.some((row) => row.id === "inq-own")).toBe(false);
   });
+
+  it("skips guest notification when notifyTenant is false", async () => {
+    const res = await deleteTourInquiry(
+      jsonRequest("http://localhost/api/portal-tour-inquiries/delete", {
+        method: "POST",
+        body: { id: "inq-own", notifyTenant: false },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(notifyTenantTourRequestRemoved).not.toHaveBeenCalled();
+  });
 });

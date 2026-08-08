@@ -75,11 +75,28 @@ export async function POST(req: Request) {
     } = await auth.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
 
-    const body = (await req.json()) as { id?: unknown; managerUserId?: unknown; start?: unknown; end?: unknown };
+    const body = (await req.json()) as {
+      id?: unknown;
+      managerUserId?: unknown;
+      start?: unknown;
+      end?: unknown;
+      notifyTenant?: unknown;
+      subject?: unknown;
+      messageBody?: unknown;
+      body?: unknown;
+    };
     const id = typeof body.id === "string" ? body.id.trim() : "";
     const start = typeof body.start === "string" ? body.start.trim() : "";
     const end = typeof body.end === "string" ? body.end.trim() : "";
     const requestedManagerUserId = typeof body.managerUserId === "string" ? body.managerUserId.trim() : "";
+    const notifyTenant = body.notifyTenant !== false;
+    const customSubject = typeof body.subject === "string" ? body.subject.trim() : "";
+    const customBody =
+      typeof body.messageBody === "string"
+        ? body.messageBody.trim()
+        : typeof body.body === "string"
+          ? body.body.trim()
+          : "";
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
     const admin = await isAdminUser(user.id);
@@ -136,9 +153,12 @@ export async function POST(req: Request) {
     }
 
     let guestNotification: { ok: boolean; skipped?: boolean; error?: string } | null = null;
-    if (targetInquiry && textField(targetInquiry, "kind") === "tour") {
+    if (targetInquiry && textField(targetInquiry, "kind") === "tour" && notifyTenant) {
       const window = windowsFromInquiry(targetInquiry)[0];
-      guestNotification = await notifyTenantTourRequestRemoved(db, req, targetInquiry, window);
+      guestNotification = await notifyTenantTourRequestRemoved(db, req, targetInquiry, window, {
+        subject: customSubject || undefined,
+        body: customBody || undefined,
+      });
       if (!guestNotification.ok && !guestNotification.skipped) {
         return NextResponse.json(
           { error: guestNotification.error ?? "Could not notify the guest before deleting this tour request." },
