@@ -429,12 +429,10 @@ export async function POST(req: Request) {
 
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
     let propertyThreadId: string | null = null;
-    const managerUserIdForProperty = String(body.managerUserId ?? "").trim();
     const propertyTitleInput = String(body.propertyTitle ?? "").trim();
     const residentPropertyChat =
       senderRole === "resident" &&
       propertyId &&
-      managerUserIdForProperty &&
       !threadId &&
       deliverToPortalInbox &&
       broadcastCategories.length === 0 &&
@@ -442,13 +440,31 @@ export async function POST(req: Request) {
       !isPrimaryAdminRecipientEmail(recipients[0]!.email);
 
     if (residentPropertyChat) {
+      const { data: propRow } = await db
+        .from("manager_property_records")
+        .select("manager_user_id, property_data, row_data")
+        .eq("id", propertyId)
+        .maybeSingle();
+      const ownerManagerId = String(propRow?.manager_user_id ?? "").trim();
+      if (!ownerManagerId) {
+        return NextResponse.json({ ok: false, error: "Property not found." }, { status: 404 });
+      }
+      const propertyManagerIds = await resolvePropertyScopedManagerRecipientIds(db, {
+        ownerManagerUserId: ownerManagerId,
+        propertyId,
+        channel: "inbox",
+      });
+      const recipientUserId = recipients[0]!.userId;
+      if (!recipientUserId || !propertyManagerIds.includes(recipientUserId)) {
+        return NextResponse.json(
+          { ok: false, error: "You can only message people connected to your account." },
+          { status: 403 },
+        );
+      }
+      const managerUserIdForProperty = recipientUserId;
+
       let propertyTitle = propertyTitleInput;
       if (!propertyTitle) {
-        const { data: propRow } = await db
-          .from("manager_property_records")
-          .select("property_data, row_data")
-          .eq("id", propertyId)
-          .maybeSingle();
         const pd = (propRow?.property_data ?? null) as { title?: string } | null;
         const rd = (propRow?.row_data ?? null) as { title?: string } | null;
         propertyTitle = String(pd?.title ?? rd?.title ?? "").trim() || propertyId;

@@ -22,6 +22,7 @@ type Body = {
   phone?: string;
   tourInquiryId?: string;
   handoff?: string;
+  nextPath?: string;
 };
 
 function normalizeEmail(value: string): string {
@@ -110,6 +111,8 @@ export async function POST(req: Request) {
       userId = created.user.id;
     }
 
+    const nextPath = typeof body.nextPath === "string" ? body.nextPath.trim() : "";
+
     const handoffResult = await completeProspectHandoffForUser(supabase, {
       userId,
       email,
@@ -117,6 +120,7 @@ export async function POST(req: Request) {
       phone,
       tourInquiryId: tourInquiryId || undefined,
       handoff: handoff === "message" ? "message" : undefined,
+      nextPath: nextPath || undefined,
     });
     if (!handoffResult.ok) {
       return NextResponse.json({ error: handoffResult.error }, { status: handoffResult.status });

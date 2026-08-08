@@ -23,6 +23,7 @@ type Body = {
   handoff?: string;
   fullName?: string;
   phone?: string;
+  nextPath?: string;
 };
 
 function oauthFullName(meta: Record<string, unknown> | null | undefined): string | undefined {
@@ -57,6 +58,7 @@ export async function POST(req: Request) {
     const handoff = typeof body.handoff === "string" ? body.handoff.trim() : "";
     const prospectFullName = typeof body.fullName === "string" ? body.fullName.trim() : "";
     const prospectPhone = typeof body.phone === "string" ? body.phone.trim() : "";
+    const prospectNextPath = typeof body.nextPath === "string" ? body.nextPath.trim() : "";
 
     const supabaseAuth = await createSupabaseServerClient();
     const {
@@ -78,6 +80,7 @@ export async function POST(req: Request) {
         phone: prospectPhone,
         tourInquiryId: tourInquiryId || undefined,
         handoff: handoff === "message" ? "message" : undefined,
+        nextPath: prospectNextPath || undefined,
       });
       if (!handoffResult.ok) {
         return NextResponse.json({ error: handoffResult.error }, { status: handoffResult.status });
