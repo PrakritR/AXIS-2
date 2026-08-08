@@ -116,7 +116,6 @@ const nextConfig: NextConfig = {
       // document lives at /resident/documents/lease.
       { source: "/resident/leases", destination: "/resident/lease", permanent: false },
       { source: "/resident/leases/:path*", destination: "/resident/lease", permanent: false },
-      { source: "/resident/lease/:path+", destination: "/resident/lease", permanent: false },
       { source: "/resident/announcements", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/announcements/:path*", destination: "/resident/dashboard", permanent: false },
       { source: "/resident/settings", destination: "/resident/profile", permanent: false },
