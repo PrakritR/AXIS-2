@@ -1,42 +1,83 @@
+import { buildPortfolioApplyHref } from "@/lib/manager-property-links";
+
 const GUEST_CONTINUE_PREFIX = "proplane_apply_guest_continue:";
 
-/** Remember that the applicant chose to apply without signing in (per listing). */
-export function markPublicApplyGuestContinue(propertyId: string): void {
+/** Session key for the account gate — one property id or a sorted portfolio token. */
+export function publicApplyGateKey(input: {
+  propertyId?: string;
+  portfolioPropertyIds?: readonly string[];
+}): string {
+  const pid = input.propertyId?.trim();
+  if (pid) return pid;
+  const ids = [
+    ...new Set((input.portfolioPropertyIds ?? []).map((id) => id.trim()).filter(Boolean)),
+  ].sort();
+  if (ids.length > 0) return `portfolio:${ids.join(",")}`;
+  return "";
+}
+
+/** Return path after sign-in / create-account for a single listing or portfolio picker. */
+export function publicApplyReturnPath(input: {
+  propertyId?: string;
+  portfolioPropertyIds?: readonly string[];
+  rentalType?: "standard" | "short_term";
+}): string {
+  const pid = input.propertyId?.trim();
+  if (pid) {
+    const q = new URLSearchParams({ propertyId: pid });
+    if (input.rentalType === "short_term") q.set("rentalType", "short_term");
+    return `/rent/apply?${q.toString()}`;
+  }
+  const ids = [
+    ...new Set((input.portfolioPropertyIds ?? []).map((id) => id.trim()).filter(Boolean)),
+  ].sort();
+  if (ids.length > 0) {
+    return buildPortfolioApplyHref(ids, {
+      rentalType: input.rentalType === "short_term" ? "short_term" : undefined,
+    });
+  }
+  return "/rent/apply";
+}
+
+/** Remember that the applicant chose to apply without signing in (per gate key). */
+export function markPublicApplyGuestContinue(gateKey: string): void {
   if (typeof window === "undefined") return;
-  const pid = propertyId.trim();
-  if (!pid) return;
+  const key = gateKey.trim();
+  if (!key) return;
   try {
-    window.sessionStorage.setItem(`${GUEST_CONTINUE_PREFIX}${pid}`, "1");
+    window.sessionStorage.setItem(`${GUEST_CONTINUE_PREFIX}${key}`, "1");
   } catch {
     /* ignore */
   }
 }
 
-export function hasPublicApplyGuestContinue(propertyId: string): boolean {
+export function hasPublicApplyGuestContinue(gateKey: string): boolean {
   if (typeof window === "undefined") return false;
-  const pid = propertyId.trim();
-  if (!pid) return false;
+  const key = gateKey.trim();
+  if (!key) return false;
   try {
-    return window.sessionStorage.getItem(`${GUEST_CONTINUE_PREFIX}${pid}`) === "1";
+    return window.sessionStorage.getItem(`${GUEST_CONTINUE_PREFIX}${key}`) === "1";
   } catch {
     return false;
   }
 }
 
 function publicApplyNext(propertyId: string): string {
-  return `/rent/apply?propertyId=${encodeURIComponent(propertyId.trim())}`;
+  return publicApplyReturnPath({ propertyId });
 }
 
-export function publicApplySignInHref(propertyId: string): string {
-  return `/auth/sign-in?intent=resident&next=${encodeURIComponent(publicApplyNext(propertyId))}`;
+export function publicApplySignInHref(gateKey: string, returnPath?: string): string {
+  const next = returnPath?.trim() || publicApplyNext(gateKey);
+  return `/auth/sign-in?intent=resident&next=${encodeURIComponent(next)}`;
 }
 
 /**
  * Create-account entry for a prospective resident. Carries the listing context so
  * signup lands them back on this application (in-portal apply), not a bare portal.
  */
-export function publicApplyCreateAccountHref(propertyId: string): string {
-  return `/auth/create-account?role=resident&next=${encodeURIComponent(publicApplyNext(propertyId))}`;
+export function publicApplyCreateAccountHref(gateKey: string, returnPath?: string): string {
+  const next = returnPath?.trim() || publicApplyNext(gateKey);
+  return `/auth/create-account?role=resident&next=${encodeURIComponent(next)}`;
 }
 
 export type PublicApplyView = "account-prompt" | "signed-in-create-resident" | "wizard";
@@ -55,11 +96,13 @@ export type PublicApplyView = "account-prompt" | "signed-in-create-resident" | "
  *  - GUEST chosen, or no property link → the wizard directly.
  */
 export function resolvePublicApplyView(input: {
-  propertyId: string;
+  propertyId?: string;
+  gateKey?: string;
   guestContinue: boolean;
   signedInNonResident: boolean;
 }): PublicApplyView {
-  const gateInPlay = Boolean(input.propertyId.trim()) && !input.guestContinue;
+  const key = input.gateKey?.trim() || input.propertyId?.trim() || "";
+  const gateInPlay = Boolean(key) && !input.guestContinue;
   if (!gateInPlay) return "wizard";
   return input.signedInNonResident ? "signed-in-create-resident" : "account-prompt";
 }

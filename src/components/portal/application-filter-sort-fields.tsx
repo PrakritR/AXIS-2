@@ -7,6 +7,7 @@ import {
   FilterSingleSelectList,
   filterMultiSelectSummary,
   filterSingleSelectSummary,
+  useFilterAccordionClose,
 } from "@/components/portal/filter-field-lists";
 import { usePortalFilterDraft } from "@/lib/portal-filter-draft";
 
@@ -54,6 +55,7 @@ function ApplicationFilterSortFieldsBody({
   dataAttr: string;
   selectionMode: "single" | "multi";
 }) {
+  const closeFieldMenu = useFilterAccordionClose();
   const [draftPropertyFilters, setDraftPropertyFilters] = usePortalFilterDraft(
     propertyFilters,
     onPropertyFiltersChange,
@@ -72,6 +74,7 @@ function ApplicationFilterSortFieldsBody({
         options={[{ value: "", label: allLabel }, ...options]}
         value={draftPropertyFilters[0] ?? ""}
         onChange={(next) => setDraftPropertyFilters(next ? [next] : [])}
+        onPick={closeFieldMenu}
         dataAttr={dataAttr}
       />
     ) : (

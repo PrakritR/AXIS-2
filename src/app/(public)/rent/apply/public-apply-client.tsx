@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import { PublicApplyAccountPrompt } from "@/components/marketing/public-apply-account-prompt";
@@ -16,6 +16,9 @@ import { BROWSE_IDS_PARAM, parseBrowseIdsParam } from "@/lib/manager-property-li
 import { loadPublicPropertyLeadFromServer, PROPERTY_PIPELINE_EVENT } from "@/lib/demo-property-pipeline";
 import {
   hasPublicApplyGuestContinue,
+  markPublicApplyGuestContinue,
+  publicApplyGateKey,
+  publicApplyReturnPath,
   resolvePublicApplyView,
 } from "@/lib/rental-application/public-apply-session";
 
@@ -78,13 +81,40 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     return propertyAcceptingOnlineApplications(linkedProperty.listingSubmission);
   }, [linkedProperty]);
 
-  const [guestGateOpen, setGuestGateOpen] = useState(() =>
-    propertyId ? !hasPublicApplyGuestContinue(propertyId) : false,
+  const rentalTypeParam = searchParams.get("rentalType")?.trim();
+  const rentalType = rentalTypeParam === "short_term" ? ("short_term" as const) : undefined;
+
+  const applyGateKey = useMemo(
+    () => publicApplyGateKey({ propertyId, portfolioPropertyIds }),
+    [propertyId, portfolioPropertyIds],
   );
 
+  const applyReturnPath = useMemo(
+    () => publicApplyReturnPath({ propertyId, portfolioPropertyIds, rentalType }),
+    [propertyId, portfolioPropertyIds, rentalType],
+  );
+
+  const [guestBypass, setGuestBypass] = useState(false);
+  const [guestContinuedInSession, setGuestContinuedInSession] = useState(false);
+
+  useEffect(() => {
+    if (!applyGateKey) {
+      setGuestContinuedInSession(false);
+      return;
+    }
+    setGuestContinuedInSession(hasPublicApplyGuestContinue(applyGateKey));
+  }, [applyGateKey]);
+
+  const continueAsGuest = useCallback(() => {
+    if (applyGateKey) markPublicApplyGuestContinue(applyGateKey);
+    setGuestBypass(true);
+  }, [applyGateKey]);
+
+  const guestContinue = !applyGateKey || guestBypass || guestContinuedInSession;
+
   const view = resolvePublicApplyView({
-    propertyId,
-    guestContinue: !guestGateOpen,
+    gateKey: applyGateKey,
+    guestContinue,
     signedInNonResident,
   });
 
@@ -93,7 +123,29 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
       <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
         <h1 className="text-2xl font-bold tracking-tight text-foreground sm:text-3xl">Rental application</h1>
         <div className="mt-8">
-          {portfolioProperties.length === 0 ? (
+          {view === "signed-in-create-resident" ? (
+            <SignedInResidentAccountPrompt
+              gateKey={applyGateKey}
+              applyReturnPath={applyReturnPath}
+              propertyTitle={
+                portfolioProperties.length === 1
+                  ? portfolioProperties[0]?.title?.trim()
+                  : `${portfolioProperties.length} homes`
+              }
+              onContinueGuest={continueAsGuest}
+            />
+          ) : view === "account-prompt" ? (
+            <PublicApplyAccountPrompt
+              gateKey={applyGateKey}
+              applyReturnPath={applyReturnPath}
+              propertyTitle={
+                portfolioProperties.length === 1
+                  ? portfolioProperties[0]?.title?.trim()
+                  : `${portfolioProperties.length} homes`
+              }
+              onContinueGuest={continueAsGuest}
+            />
+          ) : portfolioProperties.length === 0 ? (
             <ManagerLinkGate
               title="Open your manager’s application link"
               body="This application link is invalid or no longer active. Ask your property manager for a new link."
@@ -102,10 +154,9 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
             <ApplyPropertyPicker
               properties={portfolioProperties}
               onSelectProperty={(selectedId) => {
-                const rentalType = searchParams.get("rentalType")?.trim();
                 const path = buildRentalApplyHref({
                   propertyId: selectedId,
-                  rentalType: rentalType === "short_term" ? "short_term" : undefined,
+                  rentalType,
                 });
                 router.push(path);
               }}
@@ -120,15 +171,17 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     <div className="mx-auto max-w-3xl px-4 py-8 sm:py-12">
       {view === "signed-in-create-resident" ? (
         <SignedInResidentAccountPrompt
-          propertyId={propertyId}
+          gateKey={applyGateKey}
+          applyReturnPath={applyReturnPath}
           propertyTitle={propertyTitle}
-          onContinueGuest={() => setGuestGateOpen(false)}
+          onContinueGuest={continueAsGuest}
         />
       ) : view === "account-prompt" ? (
         <PublicApplyAccountPrompt
-          propertyId={propertyId}
+          gateKey={applyGateKey}
+          applyReturnPath={applyReturnPath}
           propertyTitle={propertyTitle}
-          onContinueGuest={() => setGuestGateOpen(false)}
+          onContinueGuest={continueAsGuest}
         />
       ) : !applicationsAvailable ? (
         <ApplicationUnavailableContactManager

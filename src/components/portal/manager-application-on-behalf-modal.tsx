@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/modal";
 import { Button } from "@/components/ui/button";
-import { NativeSelect } from "@/components/ui/input";
+import { PortalFormSingleSelect } from "@/components/portal/filter-field-lists";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { PortalNotificationPreviewModal } from "@/components/portal/portal-notification-preview-modal";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
@@ -335,8 +335,20 @@ export function ManagerApplicationOnBehalfModal({
     }
   };
 
-  const compactField = "min-h-9 rounded-xl px-3 py-1.5 text-sm";
   const noProperties = propertyOptions.length === 0;
+
+  const propertySelectOptions = useMemo(
+    () => propertyOptions.map((option) => ({ value: option.propertyId, label: option.propertyLabel })),
+    [propertyOptions],
+  );
+
+  const residentSelectOptions = useMemo(() => {
+    const rows = residentsForProperty.map((row) => ({
+      value: row.id,
+      label: row.hint ? `${row.residentName} · ${row.hint}` : row.residentName,
+    }));
+    return [{ value: NEW_RESIDENT_ID, label: "New resident…" }, ...rows];
+  }, [residentsForProperty]);
 
   return (
     <>
@@ -348,49 +360,35 @@ export function ManagerApplicationOnBehalfModal({
         dataAttr="manager-add-application-modal"
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <label className="flex flex-col gap-0.5 sm:col-span-2">
-            <span className={MODAL_FIELD_LABEL_CLASS}>Property</span>
-            <NativeSelect
-              className={compactField}
+          <div className="sm:col-span-2">
+            <PortalFormSingleSelect
+              label="Property"
+              labelClassName={MODAL_FIELD_LABEL_CLASS}
               value={propertyId}
-              onChange={(e) => {
-                setPropertyId(e.target.value);
+              onChange={(next) => {
+                setPropertyId(next);
                 setResidentId("");
               }}
+              options={propertySelectOptions}
+              placeholder={noProperties ? "No properties in portfolio" : "Select property"}
               disabled={noProperties}
-              data-attr="add-application-property"
-            >
-              <option value="">{noProperties ? "No properties in portfolio" : "Select property"}</option>
-              {propertyOptions.map((option) => (
-                <option key={option.propertyId} value={option.propertyId}>
-                  {option.propertyLabel}
-                </option>
-              ))}
-            </NativeSelect>
-          </label>
-          <label className="flex flex-col gap-0.5 sm:col-span-2">
-            <span className={MODAL_FIELD_LABEL_CLASS}>Resident</span>
-            <NativeSelect
-              className={compactField}
+              dataAttr="add-application-property"
+            />
+          </div>
+          <div className="sm:col-span-2">
+            <PortalFormSingleSelect
+              label="Resident"
+              labelClassName={MODAL_FIELD_LABEL_CLASS}
               value={residentId}
-              onChange={(e) => setResidentId(e.target.value)}
+              onChange={setResidentId}
+              options={residentSelectOptions}
+              placeholder={
+                !propertyId ? "Select property first" : "Select resident"
+              }
               disabled={!propertyId}
-              data-attr="add-application-resident"
-            >
-              <option value="">
-                {!propertyId
-                  ? "Select property first"
-                  : "Select resident"}
-              </option>
-              <option value={NEW_RESIDENT_ID}>New resident…</option>
-              {residentsForProperty.map((row) => (
-                <option key={row.id} value={row.id}>
-                  {row.residentName}
-                  {row.hint ? ` · ${row.hint}` : ""}
-                </option>
-              ))}
-            </NativeSelect>
-          </label>
+              dataAttr="add-application-resident"
+            />
+          </div>
         </div>
         <ModalFooter>
           <Button type="button" variant="outline" onClick={handleClose}>

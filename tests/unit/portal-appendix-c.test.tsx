@@ -45,8 +45,10 @@ describe("portal-detail-routes", () => {
   it("includes requests and promotion in PROPERTY_DETAIL_TABS", () => {
     expect(PROPERTY_DETAIL_TABS).toContain("promotion");
     expect(PROPERTY_DETAIL_TABS).toContain("requests");
+    expect(PROPERTY_DETAIL_TABS).toContain("move-in");
     expect(PROPERTY_DETAIL_TAB_LABELS.promotion).toBe("Promotion");
     expect(PROPERTY_DETAIL_TAB_LABELS.requests).toBe("Requests");
+    expect(PROPERTY_DETAIL_TAB_LABELS["move-in"]).toBe("Move-in");
   });
 
   it("parses resident detail tabs with application fallback", () => {

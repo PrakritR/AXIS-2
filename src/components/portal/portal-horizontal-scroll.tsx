@@ -15,6 +15,7 @@ import { PORTAL_MAIN_CONTENT_ID } from "@/lib/portal-layout-classes";
 function installPortalHorizontalWheelScroll(root: HTMLElement) {
   const onWheel = (event: WheelEvent) => {
     if (Math.abs(event.deltaX) > Math.abs(event.deltaY)) return;
+    if (document.documentElement.hasAttribute("data-portal-filter-open")) return;
     if (isPortaledFieldSelectMenuTarget(event.target)) return;
 
     let el = event.target as HTMLElement | null;

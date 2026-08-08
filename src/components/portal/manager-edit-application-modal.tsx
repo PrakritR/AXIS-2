@@ -176,6 +176,9 @@ export function ManagerEditApplicationModal({
             saveTarget={resolved.saveTarget}
             managerUserId={managerUserId}
             propertyIds={isBulkEdit ? editingPropertyIds : undefined}
+            listingId={
+              resolved.saveTarget.mode === "listing" ? resolved.saveTarget.saveId : editingPropertyIds[0]
+            }
             onUpdated={onSaved}
             showToast={showToast}
           />

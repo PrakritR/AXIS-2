@@ -17,11 +17,13 @@ import {
  * is for returning residents; guest apply remains the last option.
  */
 export function PublicApplyAccountPrompt({
-  propertyId,
+  gateKey,
+  applyReturnPath,
   propertyTitle,
   onContinueGuest,
 }: {
-  propertyId: string;
+  gateKey: string;
+  applyReturnPath: string;
   propertyTitle?: string;
   onContinueGuest: () => void;
 }) {
@@ -31,7 +33,7 @@ export function PublicApplyAccountPrompt({
 
   useEffect(() => {
     let cancelled = false;
-    if (hasPublicApplyGuestContinue(propertyId)) {
+    if (hasPublicApplyGuestContinue(gateKey)) {
       setGuestChosen(true);
       setResolved(true);
       return;
@@ -51,10 +53,10 @@ export function PublicApplyAccountPrompt({
     return () => {
       cancelled = true;
     };
-  }, [propertyId]);
+  }, [gateKey]);
 
   const continueAsGuest = () => {
-    markPublicApplyGuestContinue(propertyId);
+    markPublicApplyGuestContinue(gateKey);
     setGuestChosen(true);
     onContinueGuest();
   };
@@ -76,14 +78,14 @@ export function PublicApplyAccountPrompt({
       </p>
       <div className="mt-4 space-y-2.5">
         <Link
-          href={publicApplyCreateAccountHref(propertyId)}
+          href={publicApplyCreateAccountHref(gateKey, applyReturnPath)}
           className="btn-cobalt inline-flex min-h-[44px] w-full items-center justify-center rounded-full px-6 text-[15px] font-semibold"
           data-attr="public-apply-create-account"
         >
           Create account
         </Link>
         <Link
-          href={publicApplySignInHref(propertyId)}
+          href={publicApplySignInHref(gateKey, applyReturnPath)}
           className="inline-flex min-h-[44px] w-full items-center justify-center rounded-full border border-border px-6 text-[15px] font-semibold text-foreground"
           data-attr="public-apply-sign-in"
         >

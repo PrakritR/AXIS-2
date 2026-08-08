@@ -6,8 +6,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type MouseEvent,
-  type PointerEvent,
   type ReactNode,
 } from "react";
 import {
@@ -40,8 +38,11 @@ import {
 import { useIsClient } from "@/hooks/use-is-client";
 import {
   FILTER_SHEET_DISMISS_GUARD_MS,
+  FILTER_SHEET_OPEN_SUPPRESS_MS,
   registerFilterSheetDismissGuard,
+  registerFilterSheetOpenSuppress,
 } from "@/components/ui/field-select-portal-interaction";
+import { lockPortalScroll } from "@/lib/native/lock-portal-scroll";
 import { cn } from "@/lib/utils";
 
 const SMALL_PORTAL_VIEWPORT_QUERY = "(max-width: 1023px)";
@@ -139,12 +140,40 @@ function FilterPanelFields({
   );
 }
 
+function FilterDropdownBody({
+  children,
+  extraModalContent,
+  onReset,
+  compact,
+}: {
+  children: ReactNode;
+  extraModalContent?: ReactNode;
+  onReset: () => void;
+  compact: boolean;
+}) {
+  const [scrollLocked, setScrollLocked] = useState(false);
+  return (
+    <FilterSheetScrollLockContext.Provider value={setScrollLocked}>
+      <FilterFieldsAccordionScope>
+        <FilterPanelFields
+          onReset={onReset}
+          extraModalContent={extraModalContent}
+          compact={compact}
+          scrollLocked={scrollLocked}
+        >
+          {children}
+        </FilterPanelFields>
+      </FilterFieldsAccordionScope>
+    </FilterSheetScrollLockContext.Provider>
+  );
+}
+
 /**
  * Compact portal toolbar filter pattern (Communication / Payments):
  * `inline` — mobile Vaul bottom sheet + inline controls from `md` up (default).
  * `panel` — Filter button on all breakpoints; sheet on mobile, modal on desktop.
- * `dropdown` — Filter button on all breakpoints; anchored popover on every breakpoint
- *   (mobile matches desktop — no bottom sheet).
+ * `dropdown` — Filter button on all breakpoints; anchored popover on `md+`,
+ *   bottom sheet on phones (field menus scroll reliably inside the sheet).
  */
 export function PortalFilterSortSheet({
   children,
@@ -204,6 +233,7 @@ export function PortalFilterSortSheet({
   const open = isControlled ? controlledOpen : uncontrolledOpen;
   const [filterMenuOpen, setFilterMenuOpen] = useState(false);
   const dismissGuardUntilRef = useRef(0);
+  const openSuppressUntilRef = useRef(0);
   const deferControllerRef = useRef<PortalFilterDeferController | null>(null);
   const openRef = useRef(false);
   const isMobile = useSmallPortalViewport();
@@ -214,7 +244,21 @@ export function PortalFilterSortSheet({
     dismissGuardUntilRef.current = Date.now() + FILTER_SHEET_DISMISS_GUARD_MS;
   }, []);
 
+  const armSheetOpenSuppress = useCallback(() => {
+    openSuppressUntilRef.current = Date.now() + FILTER_SHEET_OPEN_SUPPRESS_MS;
+  }, []);
+
   useEffect(() => registerFilterSheetDismissGuard(armSheetDismissGuard), [armSheetDismissGuard]);
+  useEffect(() => registerFilterSheetOpenSuppress(armSheetOpenSuppress), [armSheetOpenSuppress]);
+
+  useEffect(() => {
+    if (!open) setFilterMenuOpen(false);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
+    return lockPortalScroll();
+  }, [open]);
 
   const applyOpenTransition = useCallback((prev: boolean, next: boolean) => {
     if (next && !prev) {
@@ -225,10 +269,15 @@ export function PortalFilterSortSheet({
   }, []);
 
   const setFilterOpen = useCallback(
-    (next: boolean | ((prev: boolean) => boolean)) => {
+    (
+      next: boolean | ((prev: boolean) => boolean),
+      options?: { bypassDismissGuard?: boolean },
+    ) => {
       const prev = openRef.current;
       const resolved = typeof next === "function" ? next(prev) : next;
-      if (!resolved && Date.now() < dismissGuardUntilRef.current) return;
+      if (resolved && Date.now() < openSuppressUntilRef.current) return;
+      /* Every portal filter surface dismisses only through the header ✕ (`close()`). */
+      if (!resolved && !options?.bypassDismissGuard) return;
       applyOpenTransition(prev, resolved);
       if (!isControlled) setUncontrolledOpen(resolved);
       onOpenChange?.(resolved);
@@ -236,39 +285,41 @@ export function PortalFilterSortSheet({
     [applyOpenTransition, isControlled, onOpenChange],
   );
 
+  const close = useCallback(() => {
+    setFilterOpen(false, { bypassDismissGuard: true });
+  }, [setFilterOpen]);
+
   const handleSheetOpenChange = useCallback(
     (next: boolean) => {
-      setFilterOpen(next);
+      setFilterOpen(next, { bypassDismissGuard: true });
     },
     [setFilterOpen],
   );
+
+  const handleFilterShellOpenChange = useCallback(
+    (next: boolean) => {
+      if (next) setFilterOpen(true);
+    },
+    [setFilterOpen],
+  );
+
   const isClient = useIsClient();
   const compactTrigger = desktopPresentation === "panel" || desktopPresentation === "dropdown";
-  const close = useCallback(() => {
-    const prev = openRef.current;
-    applyOpenTransition(prev, false);
-    if (!isControlled) setUncontrolledOpen(false);
-    onOpenChange?.(false);
-  }, [applyOpenTransition, isControlled, onOpenChange]);
+
+  useEffect(() => {
+    if (!open) return;
+    document.documentElement.setAttribute("data-portal-filter-open", "");
+    return () => {
+      document.documentElement.removeAttribute("data-portal-filter-open");
+    };
+  }, [open]);
 
   const handleReset = useCallback(() => {
     deferControllerRef.current?.resetAll();
     onReset();
   }, [onReset]);
 
-  const tryCloseFromBackdrop = useCallback(() => {
-    if (Date.now() < dismissGuardUntilRef.current) return;
-    close();
-  }, [close]);
-
-  const handleBackdropDismiss = useCallback(
-    (event: PointerEvent | MouseEvent) => {
-      event.preventDefault();
-      tryCloseFromBackdrop();
-    },
-    [tryCloseFromBackdrop],
-  );
-  const useMobileBottomSheet = isMobile && desktopPresentation !== "dropdown";
+  const useMobileBottomSheet = isMobile;
   const panelSizeClass =
     panelSizeClassName ??
     (compactPanel
@@ -276,21 +327,22 @@ export function PortalFilterSortSheet({
       : PORTAL_FILTER_PANEL_SIZE_CLASS);
   const panelHeightPx = portalFilterDropdownHeightPx(panelSizeClass);
   const panelWidthPx = portalFilterDropdownWidthPx(panelSizeClass);
-  const dropdownOpen = desktopPresentation === "dropdown" && open;
+  const dropdownOpen = desktopPresentation === "dropdown" && open && !isMobile;
   const { wrapRef, buttonRef, menuRect, portalHost } = useFieldSelectMenu({
     open: dropdownOpen,
-    onOpenChange: setFilterOpen,
+    onOpenChange: handleFilterShellOpenChange,
     contentPx: panelHeightPx,
     minMenuWidth: panelWidthPx,
     align: "end",
     fullBleed: isMobile,
     constrainToTitleBand: constrainDropdownToTitleBand,
     closeOnOutsidePointerDown: false,
+    closeOnEscape: false,
   });
   /* Both branches leave the height to the sheet — see PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS. */
   const resolvedMobileSheetClass = mobileSheetClassName ?? PORTAL_FILTER_COMPACT_MOBILE_SHEET_CLASS;
-  /* `filterMenuOpen` is only ever set from inside the mobile sheet's provider, so on the
-     desktop dropdown/panel this stays false and their scroll regions are untouched. */
+  /* `filterMenuOpen` is set from the mobile sheet or desktop dropdown scroll-lock provider
+     while a field menu is open, so the panel body stops scrolling under the portaled list. */
   /* One accordion scope per SHEET, not per field group: a sheet composed from sibling
      groups (Finances = ReportFilterBar + FinancesRowFilters) would otherwise hold one open
      menu per group and stack them over the panel. */
@@ -315,7 +367,7 @@ export function PortalFilterSortSheet({
         className={cn(
         panelSizeClass,
         isMobile && "max-lg:!w-screen max-lg:!max-w-[100vw] max-lg:border-x-0",
-        "portal-filter-dropdown-panel relative z-50 flex flex-col overflow-visible rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
+        "portal-filter-dropdown-panel relative z-50 flex flex-col overflow-visible overscroll-contain rounded-2xl border border-border bg-card shadow-[0_12px_40px_rgba(15,23,42,0.12)]",
         isMobile && "max-lg:rounded-xl",
       )}
       style={
@@ -342,7 +394,13 @@ export function PortalFilterSortSheet({
           !compactPanel && "flex-1",
         )}
       >
-        {fields}
+        <FilterDropdownBody
+          onReset={handleReset}
+          extraModalContent={extraModalContent}
+          compact={compactPanel}
+        >
+          {children}
+        </FilterDropdownBody>
       </div>
     </div>
   );
@@ -369,17 +427,12 @@ export function PortalFilterSortSheet({
               ? cn(
                   PORTAL_HEADER_ACTION_BTN,
                   "inline-flex w-full min-w-0 items-center justify-center gap-1.5 whitespace-nowrap max-md:px-2.5 md:px-3",
-                  dropdownOpen && isMobile && "pointer-events-none",
                 )
               : "inline-flex h-9 min-w-0 w-full items-center justify-center gap-1.5 rounded-full text-xs font-semibold whitespace-nowrap",
           )}
           data-attr={dataAttr}
           aria-expanded={compactTrigger ? open : undefined}
           onClick={() => {
-            if (desktopPresentation === "dropdown") {
-              setFilterOpen((prev) => !prev);
-              return;
-            }
             setFilterOpen(true);
           }}
         >
@@ -391,13 +444,10 @@ export function PortalFilterSortSheet({
         {dropdownOpen && isClient && menuRect && portalHost
           ? createPortal(
               <>
-                <button
-                  type="button"
-                  className="fixed inset-0 cursor-default"
+                <div
+                  className="pointer-events-none fixed inset-0 bg-black/20"
                   style={{ zIndex: fieldSelectMenuZIndex(portalHost) - 1 }}
-                  aria-label="Close filters"
-                  onPointerDown={handleBackdropDismiss}
-                  onClick={handleBackdropDismiss}
+                  aria-hidden
                 />
                 {filterDropdownPanel}
               </>,
@@ -410,9 +460,10 @@ export function PortalFilterSortSheet({
           {children}
         </div>
       ) : null}
-      {useMobileBottomSheet ? (
+      {useMobileBottomSheet && open ? (
         <VaulBottomSheet
-          open={open}
+          dismissible={false}
+          open
           onOpenChange={handleSheetOpenChange}
           title="Filter"
           flushBody={mobileFlushBody}
@@ -454,6 +505,7 @@ export function PortalFilterSortSheet({
         <Modal
           open={open}
           onClose={close}
+          dismissBlocked
           title="Filter"
           fullPage={false}
           panelClassName={cn(
@@ -472,7 +524,9 @@ export function PortalFilterSortSheet({
             ) : undefined
           }
         >
-          {fields}
+          <FilterSheetScrollLockContext.Provider value={setFilterMenuOpen}>
+            {fields}
+          </FilterSheetScrollLockContext.Provider>
         </Modal>
       ) : null}
     </>
