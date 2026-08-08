@@ -49,7 +49,7 @@ describe("household and co-signer application questions", () => {
 });
 
 describe("application form variants — short-term vs long-term are configured independently", () => {
-  it("long-term reads the top-level config triplet unchanged", () => {
+  it("long-term reads a configured custom triplet unchanged", () => {
     const sub = {
       disabledStandardApplicationKeys: ["personal-phone"],
       customApplicationFields: [],
@@ -58,6 +58,16 @@ describe("application form variants — short-term vs long-term are configured i
     const slice = applicationConfigForVariant(sub, "standard");
     expect(slice.disabledStandardApplicationKeys).toEqual(["personal-phone"]);
     expect(slice.applicationConfigMode).toBe("custom");
+  });
+
+  it("unconfigured long-term resolves to the four-question PropLane default", () => {
+    const slice = applicationConfigForVariant({}, "standard");
+    expect(slice.applicationConfigMode).toBe("standard");
+    expect(slice.disabledStandardApplicationKeys.length).toBeGreaterThan(0);
+    const fields = resolveListingApplicationFields(slice, normalizeCustomApplicationFields);
+    expect(fields).toHaveLength(4);
+    expect(fields.some((f) => f.label === "Group application")).toBe(true);
+    expect(fields.some((f) => f.label === "Co-signer planned")).toBe(false);
   });
 
   it("an unconfigured co-signer form resolves to the curated co-signer question set", () => {
@@ -164,12 +174,12 @@ describe("manager editor — disabled question visibility", () => {
 });
 
 describe("active wizard steps derive from the variant's enabled questions", () => {
-  it("the long-term default walks every step", () => {
+  it("the long-term default only walks household, property, and structural steps", () => {
     const steps = activeApplicationWizardSteps(
       applicationConfigForVariant({}, "standard"),
       normalizeCustomApplicationFields,
     );
-    expect(steps).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]);
+    expect(steps).toEqual([1, 3, 10, 11]);
   });
 
   it("the short-term default skips the screening sections it turns off", () => {
@@ -208,17 +218,17 @@ describe("active wizard steps derive from the variant's enabled questions", () =
     expect(steps).toContain(6);
     // The re-add flips the form to a customized config.
     expect(reenabled.applicationConfigMode).toBe("custom");
-    // The long-term form is untouched.
-    const longSteps = activeApplicationWizardSteps(
-      applicationConfigForVariant({}, "standard"),
-      normalizeCustomApplicationFields,
-    );
-    expect(longSteps).toContain(6);
+    const longDefault = applicationConfigForVariant({}, "standard");
+    const longSteps = activeApplicationWizardSteps(longDefault, normalizeCustomApplicationFields);
+    expect(longSteps).not.toContain(6);
+    const longReenabled = reenableListingApplicationField(longDefault, employmentKey);
+    const longStepsAfter = activeApplicationWizardSteps(longReenabled, normalizeCustomApplicationFields);
+    expect(longStepsAfter).toContain(6);
   });
 });
 
 describe("resolveListingApplicationFields respects the variant slice", () => {
-  it("lists fewer questions for the short-term default than the long-term default", () => {
+  it("lists more questions for the short-term default than the long-term default", () => {
     const longFields = resolveListingApplicationFields(
       applicationConfigForVariant({}, "standard"),
       normalizeCustomApplicationFields,
@@ -227,7 +237,8 @@ describe("resolveListingApplicationFields respects the variant slice", () => {
       applicationConfigForVariant({}, "short_term"),
       normalizeCustomApplicationFields,
     );
-    expect(shortFields.length).toBeLessThan(longFields.length);
+    expect(longFields.length).toBe(4);
+    expect(shortFields.length).toBeGreaterThan(longFields.length);
     expect(shortFields.some((f) => f.section === "employment")).toBe(false);
     expect(shortFields.some((f) => f.section === "property")).toBe(true);
   });
