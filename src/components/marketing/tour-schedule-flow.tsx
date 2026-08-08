@@ -17,6 +17,11 @@ import {
   toLocalDateStr,
 } from "@/lib/demo-admin-scheduling";
 import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
+import {
+  ProspectAccountHandoff,
+  ProspectPublicSuccessBanner,
+  PUBLIC_PROSPECT_CANVAS_CLASS,
+} from "@/components/marketing/prospect-public-handoff";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
@@ -297,24 +302,22 @@ export function TourScheduleFlow({
     });
 
     return (
-      <div className={embedded ? "space-y-4" : "mt-4 rounded-3xl border border-border bg-card p-7 shadow-sm"}>
-        <div className="rounded-2xl border px-5 py-5 portal-banner-success">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Tour request sent</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your tour request is in</h2>
-          <p className="mt-3 text-sm leading-relaxed text-foreground">
+      <div className={embedded ? "space-y-6" : PUBLIC_PROSPECT_CANVAS_CLASS}>
+        <ProspectPublicSuccessBanner eyebrow="Tour request sent" title="Your tour request is in">
+          <p>
             Your tour request was sent to the property manager. If you provided an email, you should receive a short
             acknowledgment shortly. You will get a separate confirmation once the manager approves your requested time.
           </p>
-          <p className="mt-3 text-sm font-medium text-foreground">
+          <p className="font-medium">
             Requested tour: {property.title}
             {selectedDay && selectedSlotIndex != null
               ? ` · ${MONTHS[calMonth]} ${selectedDay}, ${calYear} · ${formatAvailabilitySlotLabel(selectedSlotIndex)}`
               : ""}
           </p>
-        </div>
+        </ProspectPublicSuccessBanner>
 
         {!signedInUserId ? (
-          <ProspectAccountHandoffCard
+          <ProspectAccountHandoff
             title="Create an account to see your tour in PropLane"
             description="Track tour updates, read manager messages in Communication, and apply when you are ready."
             createAccountHref={createAccountHref}
@@ -324,7 +327,7 @@ export function TourScheduleFlow({
           />
         ) : null}
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             onClick={() => {
@@ -353,8 +356,8 @@ export function TourScheduleFlow({
   }
 
   return (
-    <div className={embedded ? "space-y-4" : "mt-4 rounded-3xl border border-border bg-card p-7 shadow-sm"}>
-      <div className="mb-6 rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+    <div className={embedded ? "space-y-6" : PUBLIC_PROSPECT_CANVAS_CLASS}>
+      <div className="text-sm">
         <p className="font-semibold text-foreground">{property.title}</p>
         {property.address ? <p className="mt-1 text-muted">{property.address}</p> : null}
       </div>
@@ -875,12 +878,10 @@ function Step3({
 
   return (
     <div className="space-y-5">
-      <div className="rounded-2xl border border-border bg-accent/30 px-4 py-3 text-sm">
-        <p className="font-semibold text-foreground">{roomLabel || property.title}</p>
-        <p className="mt-0.5 text-muted">
-          {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
-        </p>
-      </div>
+      <p className="text-sm font-semibold text-foreground">{roomLabel || property.title}</p>
+      <p className="text-sm text-muted">
+        {MONTHS[month]} {day}, {year} · {slotIndex != null ? formatAvailabilitySlotLabel(slotIndex) : ""}
+      </p>
 
       <p className="text-sm leading-relaxed text-muted">
         No account is required to book a tour. Add your contact details below, or{" "}
@@ -947,45 +948,6 @@ function Step3({
       >
         {submitting ? "Booking..." : "Book tour"}
       </button>
-    </div>
-  );
-}
-
-function ProspectAccountHandoffCard({
-  title,
-  description,
-  createAccountHref,
-  signInHref,
-  createAccountDataAttr,
-  signInDataAttr,
-}: {
-  title: string;
-  description: string;
-  createAccountHref: string;
-  signInHref: string;
-  createAccountDataAttr: string;
-  signInDataAttr: string;
-}) {
-  return (
-    <div className="mt-5 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href={createAccountHref}
-          data-attr={createAccountDataAttr}
-          className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
-        >
-          Create account
-        </Link>
-        <Link
-          href={signInHref}
-          data-attr={signInDataAttr}
-          className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
-        >
-          Sign in
-        </Link>
-      </div>
     </div>
   );
 }

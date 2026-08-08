@@ -215,6 +215,32 @@ export function shouldOfferDefaultTourGrid(publishedFutureSlots: readonly string
 }
 
 /**
+ * Published availability merged with the 9-5 default on any horizon day that
+ * has no future published window of its own.
+ *
+ * A manager who paints one week still leaves the other weeks bookable at the
+ * default rather than showing a dead page. A day that already carries even one
+ * future published slot keeps only what was painted — the default never fills
+ * in around a partial day.
+ */
+export function resolveTourOfferingSlots(
+  publishedSlots: readonly string[],
+  now: number = Date.now(),
+  days: number = DEFAULT_TOUR_HORIZON_DAYS,
+): string[] {
+  const bookablePublished = publishedSlots.filter((slot) => slotIsBookable(slot, now));
+  const datesWithPublished = new Set(
+    bookablePublished.map((slot) => slot.split(":")[0]).filter((date): date is string => Boolean(date)),
+  );
+  const merged = new Set<string>(bookablePublished);
+  for (const key of buildDefaultTourSlotKeys(now, days)) {
+    const date = key.split(":")[0];
+    if (date && !datesWithPublished.has(date)) merged.add(key);
+  }
+  return [...merged];
+}
+
+/**
  * The 9 am - 5 pm grid a property offers when its manager has published no
  * availability of their own.
  *

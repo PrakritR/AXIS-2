@@ -32,6 +32,11 @@ import {
   TOUR_ROOM_UNDECIDED_KEY,
   TOUR_ROOM_UNDECIDED_LABEL,
 } from "@/components/marketing/tour-schedule-flow";
+import {
+  ProspectAccountHandoff,
+  ProspectPublicSuccessBanner,
+  PUBLIC_PROSPECT_CANVAS_CLASS,
+} from "@/components/marketing/prospect-public-handoff";
 
 
 export { isTourRoomUndecided, TOUR_ROOM_UNDECIDED_KEY, TOUR_ROOM_UNDECIDED_LABEL };
@@ -193,7 +198,7 @@ function TourPropertyPicker({
   );
 
   return (
-    <div className="mt-8 rounded-3xl border border-border bg-card p-7 shadow-sm">
+    <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
       <p className="text-sm font-semibold text-foreground">Choose a property to tour</p>
       <p className="mt-1 text-sm leading-relaxed text-muted">
         Your property manager shared several homes. Pick the one you would like to visit and we will show available tour times.
@@ -320,21 +325,17 @@ function MessageFlow({
     const signInHref = residentSignInHref("/resident/communication");
 
     return (
-      <div className="mt-4 rounded-3xl border border-border bg-card p-7 shadow-sm">
-        <div className="rounded-2xl border px-5 py-5 portal-banner-success">
-          <p className="text-xs font-bold uppercase tracking-[0.16em] text-emerald-700">Message sent</p>
-          <h2 className="mt-2 text-2xl font-bold tracking-tight text-foreground">Your message is in</h2>
-          <p className="mt-3 text-sm leading-relaxed text-foreground">
+      <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
+        <ProspectPublicSuccessBanner eyebrow="Message sent" title="Your message is in">
+          <p>
             We sent your message to the property manager{propertyTitle ? ` about ${propertyTitle}` : ""}. You will get
             replies by email, and you can read them in PropLane Communication once you have a resident account.
           </p>
-          <p className="mt-3 text-sm font-medium text-foreground">
-            Topic: {submittedContact.topic}
-          </p>
-        </div>
+          <p className="font-medium">Topic: {submittedContact.topic}</p>
+        </ProspectPublicSuccessBanner>
 
         {!signedInUserId ? (
-          <ProspectAccountHandoffCard
+          <ProspectAccountHandoff
             title="Create an account to read replies in PropLane"
             description="See manager replies in Communication and keep the conversation in one place."
             createAccountHref={createAccountHref}
@@ -344,7 +345,7 @@ function MessageFlow({
           />
         ) : null}
 
-        <div className="mt-5">
+        <div>
           <button
             type="button"
             onClick={() => {
@@ -368,76 +369,79 @@ function MessageFlow({
   }
 
   return (
-    <div className="mt-4 space-y-3">
+    <div className={PUBLIC_PROSPECT_CANVAS_CLASS}>
       {propertyTitle ? (
-        <div className="rounded-xl border border-border bg-accent/30 px-4 py-3 text-sm">
+        <div className="text-sm">
           <p className="font-semibold text-foreground">{propertyTitle}</p>
           {propertyAddress ? <p className="mt-1 text-muted">{propertyAddress}</p> : null}
         </div>
       ) : null}
-      <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-base font-bold text-foreground">Topic</h2>
-        <p className="mt-1 text-sm leading-relaxed text-muted">
-          For rent, payments, maintenance, or portal login issues, use the{" "}
-          <Link href="/resident/dashboard" className="font-semibold text-primary hover:underline">
-            resident portal
-          </Link>
-          . These topics are for leasing questions, the area around our homes, and availability.
-        </p>
-        <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
-        <div className="mt-2">
-          <Select
-            value={topic}
-            onChange={(e) => {
-              const v = e.target.value;
-              setTopic(v);
-              if (v !== "Other") setOtherTopicDetail("");
-            }}
-          >
-            <option value="">Select a topic</option>
-            {TOPICS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </Select>
-        </div>
-        {isOther ? (
-          <div className="mt-4">
-            <Field label="Describe your topic *">
-              <input
-                type="text"
-                value={otherTopicDetail}
-                onChange={(e) => setOtherTopicDetail(e.target.value)}
-                placeholder="Type what you need help with"
-                className={inputCls}
-              />
-            </Field>
-          </div>
-        ) : null}
-      </div>
 
-      <div className="rounded-3xl border border-border bg-card p-6 shadow-sm">
-        <h2 className="text-base font-bold text-foreground">Your contact & message</h2>
-        <p className="mt-1 text-sm text-muted">
-          We will reply to the email you provide{propertyTitle ? ` about ${propertyTitle}` : ""}.
-        </p>
-        <div className="mt-5 space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Name *">
-              <input type="text" placeholder="Jane Smith" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
-            </Field>
-            <Field label="Email *">
-              <input type="email" placeholder="jane@email.com" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
-            </Field>
+      <div className="space-y-4">
+        <div>
+          <h2 className="text-base font-bold text-foreground">Topic</h2>
+          <p className="mt-1 text-sm leading-relaxed text-muted">
+            For rent, payments, maintenance, or portal login issues, use the{" "}
+            <Link href="/resident/dashboard" className="font-semibold text-primary hover:underline">
+              resident portal
+            </Link>
+            . These topics are for leasing questions, the area around our homes, and availability.
+          </p>
+          <p className="mt-4 text-xs font-semibold text-muted">What do you need help with? *</p>
+          <div className="mt-2">
+            <Select
+              value={topic}
+              onChange={(e) => {
+                const v = e.target.value;
+                setTopic(v);
+                if (v !== "Other") setOtherTopicDetail("");
+              }}
+            >
+              <option value="">Select a topic</option>
+              {TOPICS.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </Select>
           </div>
-          <Field label="Phone">
-            <input type="tel" placeholder="(206) 555-0100" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
-          </Field>
-          <Field label="Message *">
-            <textarea rows={4} placeholder="Tell us more so we can help…" className={`${inputCls} resize-none`} value={message} onChange={(e) => setMessage(e.target.value)} />
-          </Field>
-          <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="message-sms-consent" />
+          {isOther ? (
+            <div className="mt-4">
+              <Field label="Describe your topic *">
+                <input
+                  type="text"
+                  value={otherTopicDetail}
+                  onChange={(e) => setOtherTopicDetail(e.target.value)}
+                  placeholder="Type what you need help with"
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+          ) : null}
+        </div>
+
+        <div>
+          <h2 className="text-base font-bold text-foreground">Your contact & message</h2>
+          <p className="mt-1 text-sm text-muted">
+            We will reply to the email you provide{propertyTitle ? ` about ${propertyTitle}` : ""}.
+          </p>
+          <div className="mt-5 space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Name *">
+                <input type="text" placeholder="Jane Smith" className={inputCls} value={name} onChange={(e) => setName(e.target.value)} />
+              </Field>
+              <Field label="Email *">
+                <input type="email" placeholder="jane@email.com" className={inputCls} value={email} onChange={(e) => setEmail(e.target.value)} />
+              </Field>
+            </div>
+            <Field label="Phone">
+              <input type="tel" placeholder="(206) 555-0100" className={inputCls} value={phone} onChange={(e) => setPhone(e.target.value)} />
+            </Field>
+            <Field label="Message *">
+              <textarea rows={4} placeholder="Tell us more so we can help…" className={`${inputCls} resize-none`} value={message} onChange={(e) => setMessage(e.target.value)} />
+            </Field>
+            <SmsConsentCheckbox checked={smsConsent} onChange={setSmsConsent} inputId="message-sms-consent" />
+          </div>
         </div>
       </div>
 
@@ -451,45 +455,6 @@ function MessageFlow({
       >
         {submitting ? "Sending…" : "Send message"}
       </button>
-    </div>
-  );
-}
-
-function ProspectAccountHandoffCard({
-  title,
-  description,
-  createAccountHref,
-  signInHref,
-  createAccountDataAttr,
-  signInDataAttr,
-}: {
-  title: string;
-  description: string;
-  createAccountHref: string;
-  signInHref: string;
-  createAccountDataAttr: string;
-  signInDataAttr: string;
-}) {
-  return (
-    <div className="mt-5 rounded-2xl border border-border bg-card px-5 py-4 shadow-sm">
-      <p className="text-sm font-semibold text-foreground">{title}</p>
-      <p className="mt-1 text-sm leading-relaxed text-muted">{description}</p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        <Link
-          href={createAccountHref}
-          data-attr={createAccountDataAttr}
-          className="rounded-full bg-primary px-5 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-105"
-        >
-          Create account
-        </Link>
-        <Link
-          href={signInHref}
-          data-attr={signInDataAttr}
-          className="rounded-full border border-border px-5 py-2 text-sm font-semibold text-foreground hover:bg-accent/30"
-        >
-          Sign in
-        </Link>
-      </div>
     </div>
   );
 }

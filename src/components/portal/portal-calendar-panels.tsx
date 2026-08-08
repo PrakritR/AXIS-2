@@ -44,6 +44,7 @@ import {
   writeAvailabilityDateSetForStorageKeyToServer,
 } from "@/lib/demo-admin-scheduling";
 import { mondayBasedDayIndex, resolveBlockBaseDates } from "@/lib/portal/availability-block";
+import { resolveTourOfferingSlots, slotIsBookable } from "@/lib/tour-slot-math";
 import { cn } from "@/lib/utils";
 import { HORIZONTAL_SCROLL_ATTR, PORTAL_HORIZONTAL_SCROLL_ROW_CLASS } from "@/lib/horizontal-scroll";
 import {
@@ -395,6 +396,11 @@ export function PortalCalendarPanels({
   );
   const [activeSlots, setActiveSlots] = useState<Set<string>>(() =>
     writeStorageKeys.length > 0 ? unionAvailabilityForStorageKeys(writeStorageKeys) : new Set(),
+  );
+  /** Painted availability plus the 9-5 default on days with no published windows. */
+  const offeredSlots = useMemo(
+    () => new Set(resolveTourOfferingSlots([...activeSlots]).filter((slot) => slotIsBookable(slot))),
+    [activeSlots],
   );
   const [dragSelection, setDragSelection] = useState<DragSelection | null>(null);
   // Mirrors dragSelection synchronously. mousedown and mouseup can land in the
@@ -795,10 +801,10 @@ export function PortalCalendarPanels({
     (dateStr: string) =>
       visibleSlotIndices.reduce((total, slot) => {
         const key = dateSlotKey(dateStr, slot);
-        if (!activeSlots.has(key)) return total;
+        if (!offeredSlots.has(key)) return total;
         return takenSlotKeys.has(key) ? total : total + 1;
       }, 0),
-    [activeSlots, takenSlotKeys, visibleSlotIndices],
+    [offeredSlots, takenSlotKeys, visibleSlotIndices],
   );
 
   /** Week total for the "N open slots" badge — same booked-slot subtraction. */
@@ -807,11 +813,11 @@ export function PortalCalendarPanels({
     for (const ds of activeBlockDateStrs) {
       for (const slot of slotRowIndices) {
         const key = dateSlotKey(ds, slot);
-        if (activeSlots.has(key) && !takenSlotKeys.has(key)) n += 1;
+        if (offeredSlots.has(key) && !takenSlotKeys.has(key)) n += 1;
       }
     }
     return n;
-  }, [activeBlockDateStrs, activeSlots, takenSlotKeys]);
+  }, [activeBlockDateStrs, offeredSlots, takenSlotKeys]);
 
   const coManagerOverlayBySlotKey = useMemo(() => {
     const map = new Map<string, CoManagerAvailabilityOverlay>();
@@ -2373,7 +2379,7 @@ export function PortalCalendarPanels({
               const cellDate = new Date(monthYear, monthIndex, day, 12, 0, 0, 0);
               const ds = toLocalDateStr(cellDate);
               const picked = pinMonthSchedule && isInMonthPickRange(ds, monthPick);
-              const hasAvail = dateHasAvailability(cellDate, activeSlots);
+              const hasAvail = dateHasAvailability(cellDate, offeredSlots);
               return (
                 <button
                   key={`${monthYear}-${monthIndex}-${day}`}
