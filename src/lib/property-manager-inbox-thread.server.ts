@@ -195,6 +195,129 @@ export async function appendResidentPropertyManagerInboxMessage(
   );
 }
 
+/**
+ * Resident-initiated chat in the property-scoped thread (no PropLane ack turn).
+ * Writes the resident outbound copy and the manager inbound copy on the same
+ * stable thread id used by tour and listing messages.
+ */
+export async function deliverResidentPropertyManagerChatMessage(
+  db: Db,
+  input: {
+    residentEmail: string;
+    residentUserId: string | null;
+    residentName: string;
+    managerUserId: string;
+    managerEmail: string;
+    propertyId: string;
+    propertyTitle: string;
+    subject: string;
+    message: string;
+  },
+): Promise<{ threadId: string }> {
+  const residentEmail = input.residentEmail.trim().toLowerCase();
+  const managerEmail = input.managerEmail.trim().toLowerCase();
+  const message = input.message.trim();
+  const subject = input.subject.trim();
+  if (!residentEmail.includes("@") || !managerEmail.includes("@") || !message || !subject) {
+    throw new Error("resident email, manager email, subject, and message are required.");
+  }
+
+  const threadId = propertyManagerConversationThreadId({
+    residentEmail,
+    managerUserId: input.managerUserId,
+    propertyId: input.propertyId,
+  });
+  const when = formatPacificDateTime(new Date());
+  const displayFrom = propertyManagerThreadLabel(input.propertyTitle);
+  const residentName = input.residentName.trim() || "You";
+  const preview = message.slice(0, 100).replace(/\n/g, " ");
+
+  const outboundTurn: ThreadMessage = {
+    id: `out-${Date.now().toString(36)}`,
+    from: residentName,
+    body: message,
+    at: when,
+    outbound: true,
+  };
+
+  const { data: residentExisting } = await db
+    .from("portal_inbox_thread_records")
+    .select("id, row_data, owner_user_id")
+    .eq("id", threadId)
+    .maybeSingle();
+
+  if (residentExisting?.row_data) {
+    const rowData = asObject(residentExisting.row_data) ?? {};
+    await db.from("portal_inbox_thread_records").upsert(
+      {
+        id: threadId,
+        scope: RESIDENT_INBOX_SCOPE,
+        owner_user_id:
+          input.residentUserId ??
+          (residentExisting as { owner_user_id?: string | null }).owner_user_id ??
+          null,
+        participant_email: residentEmail,
+        thread_type: "portal_message",
+        row_data: {
+          ...rowData,
+          from: displayFrom,
+          email: managerEmail || String(rowData.email ?? ""),
+          subject: subject || String(rowData.subject ?? ""),
+          preview,
+          time: when,
+          unread: false,
+          propertyId: input.propertyId,
+          managerUserId: input.managerUserId,
+          propertyTitle: input.propertyTitle,
+          messages: appendThreadMessages(rowData, [outboundTurn]),
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+  } else {
+    await db.from("portal_inbox_thread_records").upsert(
+      {
+        id: threadId,
+        scope: RESIDENT_INBOX_SCOPE,
+        owner_user_id: input.residentUserId,
+        participant_email: residentEmail,
+        thread_type: "portal_message",
+        row_data: {
+          id: threadId,
+          folder: "inbox",
+          from: displayFrom,
+          email: managerEmail,
+          subject,
+          preview,
+          body: message,
+          time: when,
+          unread: false,
+          scope: RESIDENT_INBOX_SCOPE,
+          propertyId: input.propertyId,
+          managerUserId: input.managerUserId,
+          propertyTitle: input.propertyTitle,
+          rootOutbound: true,
+        },
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "id" },
+    );
+  }
+
+  await appendManagerPropertyLeadInboxMessage(db, input.managerUserId, {
+    propertyId: input.propertyId,
+    propertyTitle: input.propertyTitle,
+    prospectName: residentName,
+    prospectEmail: residentEmail,
+    topic: subject,
+    subject,
+    body: message,
+  });
+
+  return { threadId };
+}
+
 /** Manager-side thread for the same property conversation. */
 export async function appendManagerPropertyLeadInboxMessage(
   db: Db,

@@ -99,3 +99,48 @@ describe("appendResidentPropertyManagerInboxMessage", () => {
     expect(secondRow.row_data?.messages?.length).toBeGreaterThan(1);
   });
 });
+
+describe("deliverResidentPropertyManagerChatMessage", () => {
+  it("writes resident outbound and manager inbound on the property thread id", async () => {
+    const upsert = vi.fn().mockResolvedValue({ error: null });
+    const db = {
+      from: vi.fn((table: string) => {
+        if (table === "portal_inbox_thread_records") {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+              }),
+            }),
+            upsert,
+          };
+        }
+        return {};
+      }),
+    };
+
+    const { deliverResidentPropertyManagerChatMessage } = await import(
+      "@/lib/property-manager-inbox-thread.server"
+    );
+    const result = await deliverResidentPropertyManagerChatMessage(db as never, {
+      residentEmail: "resident@test.proplane.local",
+      residentUserId: "user-1",
+      residentName: "Test Resident",
+      managerUserId: "mgr-1",
+      managerEmail: "manager@test.proplane.local",
+      propertyId: "prop-oak",
+      propertyTitle: "Oak House",
+      subject: "Question about my tour",
+      message: "Can we reschedule?",
+    });
+
+    expect(result.threadId).toBe(
+      propertyManagerConversationThreadId({
+        residentEmail: "resident@test.proplane.local",
+        managerUserId: "mgr-1",
+        propertyId: "prop-oak",
+      }),
+    );
+    expect(upsert.mock.calls.length).toBeGreaterThanOrEqual(2);
+  });
+});

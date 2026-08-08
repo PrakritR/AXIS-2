@@ -60,6 +60,8 @@ export type ServiceRequest = {
   // Return
   returnPhotoDataUrl?: string;
   returnedAt?: string;
+  /** ISO timestamp of the resident's last manager reminder for this pending request. */
+  residentReminderSentAt?: string;
 };
 
 function toPositiveDollarAmount(raw: string): number | null {

@@ -45,7 +45,7 @@ import {
   resolveChannels,
   type NotificationCategory,
 } from "@/lib/notification-preferences";
-import { normalizeInboxAttachmentUrls } from "@/lib/inbox-attachments.server";
+import { deliverResidentPropertyManagerChatMessage } from "@/lib/property-manager-inbox-thread.server";
 // The recipient's stored chip label must match the sender's optimistic one, so
 // both derive it from the storage key with the SAME helper. The local copy this
 // route used to keep split the URL rather than `?path=`, so every recipient-side
@@ -190,6 +190,8 @@ export async function POST(req: Request) {
       deliverViaEmail?: boolean;
       deliverViaSms?: boolean;
       propertyId?: string;
+      propertyTitle?: string;
+      managerUserId?: string;
       /** When set with a single manager recipient, also notify linked co-managers with inbox access. */
       fanOutPropertyInbox?: boolean;
       /** Gate email/SMS per recipient's saved preference for this category (inbox always on). */
@@ -426,7 +428,51 @@ export async function POST(req: Request) {
       .filter((email) => !isPortalSandboxEmail(email));
 
     // Deliver to portal inbox for all recipients (including @axis.local demo emails)
-    if (deliverToPortalInbox && recipients.length > 0) {
+    let propertyThreadId: string | null = null;
+    const managerUserIdForProperty = String(body.managerUserId ?? "").trim();
+    const propertyTitleInput = String(body.propertyTitle ?? "").trim();
+    const residentPropertyChat =
+      senderRole === "resident" &&
+      propertyId &&
+      managerUserIdForProperty &&
+      !threadId &&
+      deliverToPortalInbox &&
+      broadcastCategories.length === 0 &&
+      recipients.length === 1 &&
+      !isPrimaryAdminRecipientEmail(recipients[0]!.email);
+
+    if (residentPropertyChat) {
+      let propertyTitle = propertyTitleInput;
+      if (!propertyTitle) {
+        const { data: propRow } = await db
+          .from("manager_property_records")
+          .select("property_data, row_data")
+          .eq("id", propertyId)
+          .maybeSingle();
+        const pd = (propRow?.property_data ?? null) as { title?: string } | null;
+        const rd = (propRow?.row_data ?? null) as { title?: string } | null;
+        propertyTitle = String(pd?.title ?? rd?.title ?? "").trim() || propertyId;
+      }
+      const { data: senderFull } = await db
+        .from("profiles")
+        .select("full_name")
+        .eq("id", user.id)
+        .maybeSingle();
+      const chat = await deliverResidentPropertyManagerChatMessage(db, {
+        residentEmail: senderEmail,
+        residentUserId: user.id,
+        residentName: fromName || String(senderFull?.full_name ?? "").trim() || "Resident",
+        managerUserId: managerUserIdForProperty,
+        managerEmail: recipients[0]!.email,
+        propertyId,
+        propertyTitle,
+        subject,
+        message: text,
+      });
+      propertyThreadId = chat.threadId;
+    }
+
+    if (deliverToPortalInbox && recipients.length > 0 && !residentPropertyChat) {
       const senderScope = scopeForRole(senderRole);
 
       const when = formatPacificDateTime(new Date());
@@ -558,7 +604,12 @@ export async function POST(req: Request) {
           { onConflict: "id" },
         );
       }
-      return NextResponse.json({ ok: true, skipped: true, reason: "No eligible real recipients — portal inbox updated." });
+      return NextResponse.json({
+        ok: true,
+        skipped: true,
+        reason: "No eligible real recipients — portal inbox updated.",
+        ...(propertyThreadId ? { propertyThreadId } : {}),
+      });
     }
 
     let emailResendId: string | null = null;
@@ -774,7 +825,11 @@ export async function POST(req: Request) {
     }
 
     track("message_sent", user.id, { delivered: Boolean(emailResendId) });
-    return NextResponse.json({ ok: true, id: emailResendId });
+    return NextResponse.json({
+      ok: true,
+      id: emailResendId,
+      ...(propertyThreadId ? { propertyThreadId } : {}),
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json({ ok: false, error: msg }, { status: 500 });

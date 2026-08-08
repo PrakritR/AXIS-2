@@ -234,13 +234,20 @@ export function ServiceRequestCard({
   req,
   onDelete,
   onEdit,
+  onSendReminder,
+  reminderSending = false,
 }: {
   req: ServiceRequest;
   onDelete: () => void;
   onEdit: () => void;
+  onSendReminder?: () => void;
+  reminderSending?: boolean;
 }) {
   const { showToast } = useAppUi();
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const reminderCooldownMs =
+    req.status === "pending" ? residentServiceRequestReminderCooldownMs(req) : 0;
+  const reminderDisabled = reminderSending || reminderCooldownMs > 0;
 
   function removeRequest() {
     deleteServiceRequest(req.id);
@@ -323,6 +330,18 @@ export function ServiceRequestCard({
       ) : null}
 
       <PortalTableDetailActions>
+        {req.status === "pending" && onSendReminder ? (
+          <Button
+            type="button"
+            variant="outline"
+            className={PORTAL_DETAIL_BTN}
+            data-attr="resident-service-request-send-reminder"
+            disabled={reminderDisabled}
+            onClick={onSendReminder}
+          >
+            {reminderSending ? "Sending…" : reminderCooldownMs > 0 ? "Reminder sent" : "Send reminder"}
+          </Button>
+        ) : null}
         {req.status === "pending" ? (
           <Button
             type="button"
@@ -355,6 +374,16 @@ export function ServiceRequestCard({
       />
     </>
   );
+}
+
+function residentServiceRequestReminderCooldownMs(req: ServiceRequest, now = Date.now()): number {
+  const sentAt = req.residentReminderSentAt?.trim();
+  if (!sentAt) return 0;
+  const ts = Date.parse(sentAt);
+  if (!Number.isFinite(ts)) return 0;
+  const elapsed = now - ts;
+  if (elapsed >= RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS) return 0;
+  return RESIDENT_WORK_ORDER_REMINDER_COOLDOWN_MS - elapsed;
 }
 
 function residentWorkOrderReminderCooldownMs(row: DemoManagerWorkOrderRow, now = Date.now()): number {
@@ -489,7 +518,7 @@ function ResidentServicesRequestAddRow({
   return (
     <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
       <PortalListAddRow
-        label="Schedule service"
+        label="Add"
         icon={ClipboardList}
         onClick={onRequest}
         disabled={disabled}
@@ -509,7 +538,7 @@ function ResidentServicesMaintenanceAddRow({
   return (
     <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
       <PortalListAddRow
-        label="Report maintenance"
+        label="Add"
         icon={Wrench}
         onClick={onReport}
         disabled={disabled}
@@ -567,6 +596,7 @@ export function ResidentServicesPanel({
   const [wEntryNotes, setWEntryNotes] = useState("");
   const [wDetails, setWDetails] = useState("");
   const [reminderSendingId, setReminderSendingId] = useState<string | null>(null);
+  const [requestReminderSendingId, setRequestReminderSendingId] = useState<string | null>(null);
 
   // maintenance form
   const [mTitle, setMTitle] = useState("");
@@ -585,7 +615,6 @@ export function ResidentServicesPanel({
   const [customTitle, setCustomTitle] = useState("");
   const [customDescription, setCustomDescription] = useState("");
   const [customPriceLimit, setCustomPriceLimit] = useState("");
-  const [sNotes, setSNotes] = useState("");
   const [maintenanceSubmitting, setMaintenanceSubmitting] = useState(false);
   const [serviceSubmitting, setServiceSubmitting] = useState(false);
 
@@ -877,6 +906,35 @@ export function ResidentServicesPanel({
     }
   }
 
+  async function sendServiceRequestReminder(req: ServiceRequest) {
+    if (requestReminderSendingId) return;
+    if (isDemoModeActive()) {
+      showToast("Reminder sent (demo).");
+      return;
+    }
+    setRequestReminderSendingId(req.id);
+    try {
+      const res = await fetch("/api/portal/service-requests/send-reminder", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: req.id }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) {
+        showToast(data.error ?? "Could not send reminder.");
+        return;
+      }
+      await syncServiceRequestsFromServer({ force: true });
+      reloadServiceRequests();
+      showToast("Reminder sent to your property manager.");
+    } catch {
+      showToast("Could not send reminder.");
+    } finally {
+      setRequestReminderSendingId(null);
+    }
+  }
+
   const residentLeaseRow = useMemo(() => {
     void leaseTick;
     if (!residentEmail) return null;
@@ -927,7 +985,6 @@ export function ResidentServicesPanel({
     setCustomTitle("");
     setCustomDescription("");
     setCustomPriceLimit("");
-    setSNotes("");
   };
 
   function getApplication() {
@@ -1118,7 +1175,6 @@ export function ResidentServicesPanel({
         "Custom request",
         `Price limit: ${limitLabel}`,
         offerDescription ? `Details: ${offerDescription}` : "",
-        sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
       ];
     } else {
       const currentOffer = availableOffers.find((offer) => offer.id === requestTypeId) ?? null;
@@ -1138,7 +1194,6 @@ export function ResidentServicesPanel({
         currentOffer.description ? `Offer details: ${currentOffer.description}` : "",
         currentOffer.price ? `Price: ${currentOffer.price}` : "",
         hasDeposit(currentOffer.deposit) ? `Deposit: ${currentOffer.deposit}` : "",
-        sNotes.trim() ? `Resident notes: ${sNotes.trim()}` : "",
       ];
     }
 
@@ -1154,7 +1209,7 @@ export function ResidentServicesPanel({
       managerUserId,
       propertyId,
       returnByDate: "",
-      notes: sNotes.trim(),
+      notes: isCustom ? customDescription.trim() : "",
     });
     if (!mirrored.ok) {
       showToast(mirrored.error || "Could not send request to your manager. Try again.");
@@ -1211,7 +1266,7 @@ export function ResidentServicesPanel({
         disabled={!servicesUnlocked}
         onClick={openMaintenanceReport}
       >
-        Report maintenance
+        Add
       </Button>
     ) : (
       <Button
@@ -1222,7 +1277,7 @@ export function ResidentServicesPanel({
         disabled={!servicesUnlocked}
         onClick={openRequestService}
       >
-        Request service
+        Add
       </Button>
     );
 
@@ -1323,6 +1378,8 @@ export function ResidentServicesPanel({
                     req={req}
                     onDelete={reloadServiceRequests}
                     onEdit={() => openRequestEdit(req)}
+                    onSendReminder={() => void sendServiceRequestReminder(req)}
+                    reminderSending={requestReminderSendingId === req.id}
                   />
                 ) : null}
               </PortalMobileSummaryCard>
@@ -1358,6 +1415,8 @@ export function ResidentServicesPanel({
                                 req={req}
                                 onDelete={reloadServiceRequests}
                                 onEdit={() => openRequestEdit(req)}
+                                onSendReminder={() => void sendServiceRequestReminder(req)}
+                                reminderSending={requestReminderSendingId === req.id}
                               />
                             </td>
                           </tr>
@@ -1470,7 +1529,7 @@ export function ResidentServicesPanel({
       {modalMode === "maintenance" ? (
       <Modal
         open
-        title="Report maintenance"
+        title="Add work order"
         onClose={() => { setModalMode("none"); resetMaintenance(); }}
         panelClassName="max-w-lg"
         footer={
@@ -1582,7 +1641,7 @@ export function ResidentServicesPanel({
       {/* Request modal */}
       <Modal
         open={modalMode === "service"}
-        title="Request service"
+        title="Add request"
         onClose={() => { setModalMode("none"); resetService(); }}
         panelClassName="max-w-lg"
         footer={
@@ -1712,18 +1771,6 @@ export function ResidentServicesPanel({
                       </p>
                     </div>
                   </>
-                ) : null}
-
-                {requestTypeId ? (
-                  <div>
-                    <p className="mb-1 text-[11px] font-medium text-muted">Additional notes (optional)</p>
-                    <Input
-                      value={sNotes}
-                      onChange={(e) => setSNotes(e.target.value)}
-                      placeholder="Preferred timing, special instructions…"
-                      className="bg-card"
-                    />
-                  </div>
                 ) : null}
               </div>
             </>

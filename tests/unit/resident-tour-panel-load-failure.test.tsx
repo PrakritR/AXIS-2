@@ -116,7 +116,8 @@ describe("ResidentTourPanel surfaces a failed read instead of an empty list", ()
       expect(document.querySelector('[data-attr="resident-tour-schedule"]')).not.toBeNull();
     });
     expect(screen.queryByRole("alert")).toBeNull();
+    expect(document.querySelector('[data-attr="resident-tour-list"]')).toBeNull();
     const pendingTab = document.querySelector('[data-attr="resident-tour-bucket-pending"]');
-    expect(pendingTab?.textContent ?? "").toContain("0");
+    expect(pendingTab?.textContent ?? "").toBe("Pending");
   });
 });
