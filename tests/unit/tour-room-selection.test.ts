@@ -3,7 +3,7 @@ import {
   TOUR_ROOM_UNDECIDED_KEY,
   TOUR_ROOM_UNDECIDED_LABEL,
   isTourRoomUndecided,
-} from "@/app/(public)/rent/tours-contact/page";
+} from "@/components/marketing/tour-schedule-flow";
 
 describe("tour room selection", () => {
   it("recognizes the undecided sentinel key", () => {
