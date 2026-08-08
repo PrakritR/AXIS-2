@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 import { PortalDetailHeader } from "@/components/portal/portal-list-detail-shell";
+import { PortalPageFooterActions } from "@/components/portal/portal-section-action-row";
 import { PortalPageScrollBody } from "@/lib/portal-page-chrome-layout";
 import { usePortalNavigate } from "@/lib/portal-nav-client";
 import { usePortalStickyPageChrome } from "@/hooks/use-portal-sticky-page-chrome";
@@ -37,6 +38,8 @@ export function PortalRecordDetailPage({
    */
   scrollBody = true,
   dataAttrBack = "portal-record-detail-back",
+  /** Pinned bottom bar (Pay, Download, …) — same pattern as resident profile detail tabs. */
+  footer,
 }: {
   /** @deprecated Detail chrome no longer renders a duplicate section title. */
   pageTitle?: string;
@@ -70,6 +73,7 @@ export function PortalRecordDetailPage({
   pinScrollBody?: boolean;
   scrollBody?: boolean;
   dataAttrBack?: string;
+  footer?: ReactNode;
 }) {
   const navigate = usePortalNavigate();
   usePortalStickyPageChrome(pinScrollBody);
@@ -98,6 +102,11 @@ export function PortalRecordDetailPage({
       />
       </div>
       <div className={cn(bodyFill && "flex min-h-0 flex-1 flex-col")}>{body}</div>
+      {footer ? (
+        <PortalPageFooterActions pinned rowVariant="header">
+          {footer}
+        </PortalPageFooterActions>
+      ) : null}
     </div>
   );
 }

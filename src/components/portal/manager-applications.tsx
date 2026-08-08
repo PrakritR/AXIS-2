@@ -233,7 +233,7 @@ export function runApplicationPdfDownload(
   });
 }
 
-function ApplicationPdfDownloadButton({
+export function ApplicationPdfDownloadButton({
   row,
   label = "Download PDF",
   className = PORTAL_DETAIL_BTN,

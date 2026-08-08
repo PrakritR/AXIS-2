@@ -7,11 +7,10 @@ import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/mod
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeCamera } from "@/lib/native/use-native-camera";
 import type { ManagerDocumentDTO } from "@/lib/documents/manager-documents";
-import {
-  PORTAL_LIST_ADD_ICONS,
+import { PortalListAddRow,
   PORTAL_LIST_ADD_ROW_WRAP_CLASS,
-  PortalListAddRow,
 } from "@/components/portal/portal-list-add-row";
+import { PortalPageFooterActions } from "@/components/portal/portal-section-action-row";
 import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_CELL,
@@ -26,6 +25,7 @@ import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
 import { addUploadedOwnLease, type UploadedOwnLease } from "@/lib/resident-lease-upload";
 import { UploadedLeasePdfPreview } from "@/components/portal/uploaded-lease-pdf-preview";
 import { safeFormatDateTime } from "@/lib/pacific-time";
+import { cn } from "@/lib/utils";
 
 function isPdfDocumentSrc(src: string): boolean {
   return src.startsWith("data:application/pdf") || /\.pdf(\?|$)/i.test(src);
@@ -101,6 +101,7 @@ export function DocumentInlineViewer({
   /** When true, omits outer margin and uses the portal table detail action strip. */
   embedded = false,
   actionsPlacement = "top",
+  hideActions = false,
 }: {
   /** Used for iframe/img accessibility only — not shown in the UI. */
   title: string;
@@ -120,6 +121,8 @@ export function DocumentInlineViewer({
   embedded?: boolean;
   /** Toolbar above (`top`) or download strip below (`bottom`) the preview. */
   actionsPlacement?: "top" | "bottom";
+  /** When true, omits the inline/top/bottom action strip (caller renders a pinned footer). */
+  hideActions?: boolean;
 }) {
   const sectionRef = useRef<HTMLElement>(null);
   useEffect(() => {
@@ -139,7 +142,7 @@ export function DocumentInlineViewer({
   );
 
   const actionStrip =
-    downloadButton || extraActions ? (
+    hideActions || !(downloadButton || extraActions) ? null : (
       embedded ? (
         <PortalTableDetailActions placement={actionsPlacement}>
           {downloadButton}
@@ -158,7 +161,7 @@ export function DocumentInlineViewer({
           {extraActions}
         </div>
       )
-    ) : null;
+    );
 
   return (
     <section ref={sectionRef} className={embedded ? undefined : "mt-6"}>
@@ -450,14 +453,12 @@ export function ResidentOtherDocumentsTable({
   onRemove,
   onAdd,
   demo = false,
-  emptyMessage = "No documents yet. Add one below, or wait for your manager to share files with you.",
 }: {
   uploads: UploadedOwnLease[];
   loading: boolean;
   onRemove: (id: string) => void;
   onAdd?: () => void;
   demo?: boolean;
-  emptyMessage?: string;
 }) {
   const { showToast } = useAppUi();
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -555,21 +556,16 @@ export function ResidentOtherDocumentsTable({
         </div>
       );
     }
-    return (
-      <>
-        <PortalDataTableEmpty icon="default" message={emptyMessage} />
-        {onAdd ? (
-          <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
-            <PortalListAddRow
-              label="Add document"
-              icon={PORTAL_LIST_ADD_ICONS.lease}
-              onClick={onAdd}
-              dataAttr="resident-documents-add"
-            />
-          </div>
-        ) : null}
-      </>
-    );
+    return onAdd ? (
+      <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+        <PortalListAddRow
+          label="Add document"
+          bare
+          onClick={onAdd}
+          dataAttr="resident-documents-add"
+        />
+      </div>
+    ) : null;
   }
 
   const sourceBadge = (row: CombinedDocRow) =>
@@ -596,23 +592,10 @@ export function ResidentOtherDocumentsTable({
     selected == null ? null : selected.source === "own" ? (
       <DocumentInlineViewer
         embedded
+        hideActions
         title={selected.name}
         src={ownIsPdf ? selected.upload.dataUrl : null}
         onDownload={() => triggerDocumentDownload(selected.upload.dataUrl, selected.name)}
-        extraActions={
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full text-danger"
-            onClick={(e) => {
-              e.stopPropagation();
-              setSelectedId(null);
-              onRemove(selected.upload.id);
-            }}
-          >
-            Remove
-          </Button>
-        }
       >
         {ownIsImage ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -634,6 +617,7 @@ export function ResidentOtherDocumentsTable({
     ) : (
       <DocumentInlineViewer
         embedded
+        hideActions
         title={selected.name}
         src={!sharedUrlLoading && sharedIsPdf ? sharedUrl : null}
         downloadAttr="resident-shared-document-download"
@@ -654,6 +638,45 @@ export function ResidentOtherDocumentsTable({
           </div>
         )}
       </DocumentInlineViewer>
+    );
+
+  const selectedFooterActions =
+    selected == null ? null : selected.source === "own" ? (
+      <>
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          data-attr="resident-document-download"
+          onClick={() => triggerDocumentDownload(selected.upload.dataUrl, selected.name)}
+        >
+          Download
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(PORTAL_DETAIL_BTN, "flex-1 text-danger")}
+          data-attr="resident-document-remove"
+          onClick={() => {
+            setSelectedId(null);
+            onRemove(selected.upload.id);
+          }}
+        >
+          Remove
+        </Button>
+      </>
+    ) : (
+      <Button
+        type="button"
+        variant="outline"
+        className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+        data-attr="resident-shared-document-download"
+        onClick={() =>
+          triggerDocumentDownload(`${SHARED_DOCUMENTS_SIGNED_URL_BASE}/${selected.doc.id}/signed-url?download=1`)
+        }
+      >
+        Download
+      </Button>
     );
 
   return (
@@ -708,11 +731,16 @@ export function ResidentOtherDocumentsTable({
         <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
           <PortalListAddRow
             label="Add document"
-            icon={PORTAL_LIST_ADD_ICONS.lease}
+            bare
             onClick={onAdd}
             dataAttr="resident-documents-add"
           />
         </div>
+      ) : null}
+      {selectedFooterActions ? (
+        <PortalPageFooterActions pinned rowVariant="header">
+          {selectedFooterActions}
+        </PortalPageFooterActions>
       ) : null}
     </>
   );

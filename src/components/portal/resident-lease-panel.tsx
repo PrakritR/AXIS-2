@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { useAppUi } from "@/components/providers/app-ui-provider";
-import { LeaseAmendMoveOutModal } from "@/components/portal/lease-amend-move-out-modal";
+import { LeaseAmendMoveOutModal, LeaseRenewModal } from "@/components/portal/lease-amend-move-out-modal";
 import { LeaseDocumentPreview } from "@/components/portal/lease-document-preview";
 import { LeaseSigningModal } from "@/components/portal/lease-signing-modal";
 import { ManagerPortalPageShell, PORTAL_HEADER_ACTION_BTN } from "@/components/portal/portal-metrics";
@@ -12,6 +12,7 @@ import { PortalEmptyState } from "@/components/portal/portal-empty-state";
 import {
   shortToLongTermUpgradeBreakdown,
 } from "@/lib/household-charges";
+import { listingAllowedLeaseTerms } from "@/lib/rental-application/data";
 import {
   downloadAiGeneratedLeaseHtml,
   gatherLeaseGenerationContext,
@@ -43,6 +44,7 @@ export function ResidentLeasePanel() {
   const [showSigningModal, setShowSigningModal] = useState(false);
   const [uploadingPdf, setUploadingPdf] = useState(false);
   const [showMoveOutModal, setShowMoveOutModal] = useState(false);
+  const [showRenewModal, setShowRenewModal] = useState(false);
   const { email, residentAxisId, profileManagerId, axisResolved } = useResidentPortalAxisContext();
 
   useEffect(() => {
@@ -108,6 +110,11 @@ export function ResidentLeasePanel() {
     if (!isShortTerm) return null;
     return shortToLongTermUpgradeBreakdown(propertyId, true);
   }, [pipelineRow, leaseCtx.application]);
+
+  const allowedRenewTerms = useMemo(() => {
+    const propertyId = pipelineRow?.propertyId ?? pipelineRow?.application?.propertyId ?? "";
+    return propertyId ? listingAllowedLeaseTerms(propertyId) : undefined;
+  }, [pipelineRow]);
 
   const onDownloadAiLease = useCallback(() => {
     downloadAiGeneratedLeaseHtml(leaseCtx);
@@ -416,8 +423,27 @@ export function ResidentLeasePanel() {
         leaseStart={pipelineRow?.application?.leaseStart ?? ""}
         checkUrl="/api/resident/check-move-out-availability"
         amendUrl="/api/resident/extend-lease"
+        showRenewOption
+        onOpenRenew={() => setShowRenewModal(true)}
         onSuccess={() => void handleMoveOutSuccess()}
       />
+
+      {pipelineRow ? (
+        <LeaseRenewModal
+          open={showRenewModal}
+          onClose={() => setShowRenewModal(false)}
+          currentEnd={pipelineRow.application?.leaseEnd ?? ""}
+          currentTerm={pipelineRow.application?.leaseTerm ?? "12-Month"}
+          currentRentLabel={pipelineRow.signedRentLabel ?? pipelineRow.application?.managerRentOverride ?? ""}
+          leaseId={pipelineRow.id}
+          renewUrl="/api/resident/renew-lease"
+          allowedTermOptions={allowedRenewTerms}
+          onSuccess={() => {
+            setShowRenewModal(false);
+            void handleMoveOutSuccess();
+          }}
+        />
+      ) : null}
 
       <ManagerPortalPageShell
         title="Lease"

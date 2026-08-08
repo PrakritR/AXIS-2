@@ -579,6 +579,18 @@ export type LeaseWorkflowStatus =
   | "Fully Signed"
   | "Voided";
 
+export type SignedLeaseSnapshot = {
+  id: string;
+  label: string;
+  fullySignedAt: string;
+  leaseTerm?: string;
+  leaseStart?: string;
+  leaseEnd?: string;
+  generatedHtml?: string | null;
+  managerUploadedPdf?: LeasePipelineRow["managerUploadedPdf"];
+  archivedAtIso: string;
+};
+
 export type LeasePipelineRow = {
   id: string;
   residentName: string;
@@ -666,6 +678,8 @@ export type LeasePipelineRow = {
     monthlyRent: number | null;
     requestedAtIso: string;
   } | null;
+  /** Prior fully-signed lease documents kept when a renewal/amendment clears signatures. */
+  signedLeaseSnapshots?: SignedLeaseSnapshot[];
   /** Individual resident lease vs one household joint bundle lease. */
   leaseKind?: LeaseKind;
   jointLeaseGroupId?: string | null;

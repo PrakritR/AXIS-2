@@ -8,6 +8,7 @@ import {
 import { resolvePropertyScopedManagerRecipientIds } from "@/lib/co-manager-notification-recipients.server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { filterRecipientsBySenderScope } from "@/lib/inbox-recipient-scope";
+import { resolveInboxSenderRoleForPortal } from "@/lib/inbox-portal-sender";
 import { sendPushToUser } from "@/lib/push-notifications.server";
 import { inboxDeepLinkForRole } from "@/lib/platform/parity";
 import {
@@ -194,6 +195,7 @@ export async function POST(req: Request) {
       /** Gate email/SMS per recipient's saved preference for this category (inbox always on). */
       eventCategory?: string;
       attachmentUrls?: unknown;
+      senderPortal?: string;
     };
 
     const threadId = String(body.threadId ?? "").trim();
@@ -261,8 +263,17 @@ export async function POST(req: Request) {
     }
 
     let toUserIds = normalizeUserIds(body.toUserIds);
+    const senderIsAdmin = await isAdminUser(user.id);
     const { data: senderProfile } = await db.from("profiles").select("role").eq("id", user.id).maybeSingle();
-    const senderRole = String(senderProfile?.role ?? "").trim().toLowerCase() || null;
+    const portalParam = String(body.senderPortal ?? "").trim().toLowerCase();
+    const senderPortal =
+      portalParam === "manager" || portalParam === "vendor" ? portalParam : "resident";
+    const senderRole = await resolveInboxSenderRoleForPortal(db, {
+      userId: user.id,
+      legacyRole: senderProfile?.role ?? null,
+      portal: senderPortal,
+      isAdmin: senderIsAdmin,
+    });
 
     const propertyId = String(body.propertyId ?? "").trim();
     if (propertyId && body.fanOutPropertyInbox !== false && toUserIds.length === 1) {
@@ -341,10 +352,10 @@ export async function POST(req: Request) {
     // already resolved from the sender's own relationships, so they pass through;
     // this meaningfully restricts arbitrary toEmails/toUserIds. See
     // src/lib/inbox-recipient-scope.ts for the authoritative rules.
-    const senderIsAdmin = senderRole === "admin" || (await isAdminUser(user.id));
+    const senderActsAsAdmin = senderIsAdmin || senderRole === "admin";
 
     let recipients = [...recipientsByEmail.values()];
-    if (!senderIsAdmin) {
+    if (!senderActsAsAdmin) {
       const { allowed } = await filterRecipientsBySenderScope(
         db,
         { id: user.id, email: senderEmail, role: senderRole, isAdmin: false },

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { isAdminUser } from "@/lib/auth/admin-preview";
 import { getEffectiveUserIdForPortal } from "@/lib/auth/effective-session";
 import { listEligibleInboxContacts } from "@/lib/inbox-recipient-scope";
+import { resolveInboxSenderRoleForPortal } from "@/lib/inbox-portal-sender";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 
@@ -51,6 +52,13 @@ export async function GET(req: Request) {
         actorRole = String(effectiveProfile?.role ?? "").trim().toLowerCase() || portal;
       }
     }
+
+    actorRole = await resolveInboxSenderRoleForPortal(db, {
+      userId: actorId,
+      legacyRole: actorRole,
+      portal,
+      isAdmin: admin && actorId === user.id,
+    });
 
     const contacts = await listEligibleInboxContacts(db, {
       id: actorId,

@@ -8,6 +8,18 @@ import { useAppUi } from "@/components/providers/app-ui-provider";
 import { computeLeaseEndDate, shouldAutoComputeLeaseEnd } from "@/lib/rental-application/lease-dates";
 import { LEASE_TERM_OPTIONS } from "@/lib/rental-application/lease-terms";
 import { formatPacificDate } from "@/lib/pacific-time";
+import { cn } from "@/lib/utils";
+
+type LeaseChangeIntent = "extend" | "early" | "renew";
+
+function addMonthsToIsoDate(isoDate: string, months: number): string {
+  const parts = isoDate.split("-").map(Number);
+  if (parts.length !== 3) return isoDate;
+  const [year, month, day] = parts as [number, number, number];
+  const date = new Date(year, month - 1 + months, day);
+  if (Number.isNaN(date.getTime())) return isoDate;
+  return date.toISOString().slice(0, 10);
+}
 
 type AvailabilityResult =
   | { status: "idle" }
@@ -26,6 +38,8 @@ export function LeaseAmendMoveOutModal({
   amendUrl,
   amendBody,
   onSuccess,
+  onOpenRenew,
+  showRenewOption = false,
 }: {
   open: boolean;
   onClose: () => void;
@@ -36,8 +50,12 @@ export function LeaseAmendMoveOutModal({
   amendUrl: string;
   amendBody?: Record<string, string>;
   onSuccess: () => void;
+  /** Opens the full renewal-term flow (month-to-month, 3/6/12 month, custom). */
+  onOpenRenew?: () => void;
+  showRenewOption?: boolean;
 }) {
   const { showToast } = useAppUi();
+  const [intent, setIntent] = useState<LeaseChangeIntent>("extend");
   const [selectedDate, setSelectedDate] = useState("");
   const [availability, setAvailability] = useState<AvailabilityResult>({ status: "idle" });
   const [submitting, setSubmitting] = useState(false);
@@ -46,12 +64,19 @@ export function LeaseAmendMoveOutModal({
   useEffect(() => {
     if (!open) {
       queueMicrotask(() => {
+        setIntent("extend");
         setSelectedDate("");
         setAvailability({ status: "idle" });
         setSubmitting(false);
       });
     }
   }, [open]);
+
+  useEffect(() => {
+    if (!open || intent !== "early" || selectedDate) return;
+    if (!currentEnd) return;
+    queueMicrotask(() => setSelectedDate(currentEnd));
+  }, [open, intent, currentEnd, selectedDate]);
 
   const direction = selectedDate
     ? selectedDate < currentEnd
@@ -112,11 +137,24 @@ export function LeaseAmendMoveOutModal({
   }, [selectedDate, currentEnd, direction, checkUrl, amendBody]);
 
   const canConfirm =
+    intent !== "renew" &&
     Boolean(selectedDate) &&
     selectedDate !== currentEnd &&
     !submitting &&
     availability.status !== "checking" &&
     availability.status !== "unavailable";
+
+  const quickExtendOptions = useMemo(
+    () =>
+      currentEnd
+        ? ([1, 3, 6] as const).map((months) => ({
+            months,
+            label: `+${months} month${months === 1 ? "" : "s"}`,
+            value: addMonthsToIsoDate(currentEnd, months),
+          }))
+        : [],
+    [currentEnd],
+  );
 
   const handleConfirm = async () => {
     if (!selectedDate || !canConfirm) return;
@@ -156,11 +194,13 @@ export function LeaseAmendMoveOutModal({
       title={title}
       onClose={onClose}
       footer={
+        intent === "renew" ? undefined : (
         <ModalFooter className="w-full">
           <Button type="button" variant="primary" className="flex-1 rounded-full" disabled={!canConfirm} onClick={() => handleConfirm()}>
             {submitting ? "Saving…" : direction === "decrease" ? "Update move-out" : "Extend lease"}
           </Button>
         </ModalFooter>
+        )
       }
     >
       <div className="mb-5 flex items-center gap-3 rounded-xl bg-accent/30 px-4 py-3 text-sm">
@@ -168,12 +208,94 @@ export function LeaseAmendMoveOutModal({
         <span className="ml-auto font-semibold text-foreground">{currentEndFormatted}</span>
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {(
+          [
+            { id: "extend" as const, label: "Extend move-out" },
+            { id: "early" as const, label: "Early move-out" },
+            ...(showRenewOption ? [{ id: "renew" as const, label: "Renew term" }] : []),
+          ] as const
+        ).map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            className={cn(
+              "rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors",
+              intent === option.id
+                ? "border-primary bg-primary/10 text-primary"
+                : "border-border text-muted hover:border-primary/30 hover:text-foreground",
+            )}
+            onClick={() => {
+              setIntent(option.id);
+              setSelectedDate("");
+              setAvailability({ status: "idle" });
+            }}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+
+      {intent === "renew" ? (
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Choose a new lease term — month-to-month, 3 / 6 / 12 months, or custom — based on what your property offers.
+            Your current lease stays on file; the new lease replaces it after both parties sign.
+          </p>
+          <Button
+            type="button"
+            variant="primary"
+            className="w-full rounded-full"
+            onClick={() => {
+              onClose();
+              onOpenRenew?.();
+            }}
+          >
+            Choose renewal term
+          </Button>
+        </div>
+      ) : (
+        <>
       <div className="mb-4">
-        <label className="mb-1.5 block text-sm font-semibold text-muted">New move-out date</label>
+        <label className="mb-1.5 block text-sm font-semibold text-muted">
+          {intent === "early" ? "New move-out date (earlier)" : "New move-out date"}
+        </label>
+        {intent === "extend" && quickExtendOptions.length > 0 ? (
+          <div className="mb-3 flex flex-wrap gap-2">
+            {quickExtendOptions.map((option) => (
+              <button
+                key={option.months}
+                type="button"
+                className={cn(
+                  "rounded-full border px-3 py-1.5 text-xs font-semibold",
+                  selectedDate === option.value
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border text-muted hover:border-primary/30",
+                )}
+                onClick={() => setSelectedDate(option.value)}
+              >
+                {option.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              className={cn(
+                "rounded-full border px-3 py-1.5 text-xs font-semibold",
+                selectedDate && !quickExtendOptions.some((option) => option.value === selectedDate)
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted hover:border-primary/30",
+              )}
+              onClick={() => setSelectedDate("")}
+            >
+              Custom date
+            </button>
+          </div>
+        ) : null}
         <input
           type="date"
           value={selectedDate}
           min={leaseStart || undefined}
+          max={intent === "early" && currentEnd ? currentEnd : undefined}
           onChange={(e) => setSelectedDate(e.target.value)}
           className="w-full rounded-xl border border-border px-3 py-2.5 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-blue-100"
         />
@@ -205,6 +327,8 @@ export function LeaseAmendMoveOutModal({
           </p>
         </div>
       ) : null}
+        </>
+      )}
     </Modal>
   );
 }
@@ -231,6 +355,8 @@ export function LeaseRenewModal({
   currentRentLabel,
   leaseId,
   onSuccess,
+  renewUrl = "/api/manager/amend-lease",
+  allowedTermOptions,
 }: {
   open: boolean;
   onClose: () => void;
@@ -239,10 +365,18 @@ export function LeaseRenewModal({
   currentRentLabel: string;
   leaseId: string;
   onSuccess: () => void;
+  renewUrl?: string;
+  /** Listing-offered terms; defaults to all standard options when omitted. */
+  allowedTermOptions?: readonly string[];
 }) {
   const { showToast } = useAppUi();
+  const termOptions = useMemo(() => {
+    const allowed = new Set((allowedTermOptions ?? LEASE_TERM_OPTIONS).map((t) => t.trim()).filter(Boolean));
+    const filtered = LEASE_TERM_OPTIONS.filter((t) => allowed.has(t));
+    return filtered.length > 0 ? filtered : [...LEASE_TERM_OPTIONS];
+  }, [allowedTermOptions]);
   const defaultStart = currentEnd ? dayAfter(currentEnd) : new Date().toISOString().slice(0, 10);
-  const [leaseTerm, setLeaseTerm] = useState(currentTerm || "12-Month");
+  const [leaseTerm, setLeaseTerm] = useState(currentTerm || termOptions[0] || "12-Month");
   const [leaseStart, setLeaseStart] = useState(defaultStart);
   const [customEnd, setCustomEnd] = useState("");
   const [rent, setRent] = useState(() => currentRentLabel.replace(/[^\d.]/g, ""));
@@ -251,14 +385,17 @@ export function LeaseRenewModal({
   useEffect(() => {
     if (!open) {
       queueMicrotask(() => {
-        setLeaseTerm(currentTerm || "12-Month");
+        const initialTerm = termOptions.includes(currentTerm as (typeof LEASE_TERM_OPTIONS)[number])
+          ? currentTerm
+          : termOptions[0] || "12-Month";
+        setLeaseTerm(initialTerm || "12-Month");
         setLeaseStart(defaultStart);
         setCustomEnd("");
         setRent(currentRentLabel.replace(/[^\d.]/g, ""));
         setSubmitting(false);
       });
     }
-  }, [open, currentTerm, defaultStart, currentRentLabel]);
+  }, [open, currentTerm, defaultStart, currentRentLabel, termOptions]);
 
   const isMonthToMonth = leaseTerm === "Month-to-Month";
   const isCustom = leaseTerm === "Custom";
@@ -281,12 +418,11 @@ export function LeaseRenewModal({
     if (!canConfirm) return;
     setSubmitting(true);
     try {
-      const res = await fetch("/api/manager/amend-lease", {
+      const res = await fetch(renewUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          leaseId,
-          mode: "renew",
+          ...(renewUrl.includes("/manager/") ? { leaseId, mode: "renew" } : {}),
           leaseTerm,
           leaseStart,
           leaseEnd,
@@ -327,7 +463,7 @@ export function LeaseRenewModal({
       <div className="mb-4">
         <label className="mb-1.5 block text-sm font-semibold text-muted">New lease term</label>
         <Select value={leaseTerm} onChange={(e) => setLeaseTerm(e.target.value)} data-attr="lease-renew-term">
-          {LEASE_TERM_OPTIONS.map((t) => (
+          {termOptions.map((t) => (
             <option key={t} value={t}>
               {t}
             </option>

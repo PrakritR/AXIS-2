@@ -26,6 +26,13 @@ import { filterEmailInboxThreads } from "@/lib/communication-inbox-filters";
 import { demoResidentInboxThreads } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import { isUpcomingScheduledInboxMessage, type ScheduledInboxMessageRecord } from "@/lib/scheduled-inbox-messages";
+
+function resolveResidentReplyRecipientEmail(threadEmail: string, contacts: InboxScopedContact[]): string {
+  const normalized = threadEmail.trim().toLowerCase();
+  if (contacts.some((contact) => contact.email.trim().toLowerCase() === normalized)) return normalized;
+  const manager = contacts.find((contact) => contact.role === "manager");
+  return manager?.email.trim().toLowerCase() ?? normalized;
+}
 import {
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
@@ -711,6 +718,7 @@ export const ResidentInboxPanel = forwardRef<
                 text: p.body.trim(),
                 deliverToPortalInbox: true,
                 eventCategory: "messages",
+                senderPortal: "resident",
               }),
             });
             const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
@@ -824,6 +832,7 @@ export const ResidentInboxPanel = forwardRef<
         );
       };
       const subject = thread.subject.startsWith("Re:") ? thread.subject : `Re: ${thread.subject}`;
+      const replyToEmail = resolveResidentReplyRecipientEmail(thread.email, eligibleContacts);
       // These record what a channel ACTUALLY did, never what was requested — the
       // caller's toast reads them, and once either is true the reply IS
       // delivered, so no later error may withdraw the bubble or report a failure.
@@ -844,10 +853,11 @@ export const ResidentInboxPanel = forwardRef<
                 threadId: thread.id,
                 subject,
                 text,
-                toEmails: [thread.email],
+                toEmails: [replyToEmail],
                 deliverToPortalInbox: true,
                 deliverViaEmail: true,
                 deliverViaSms: false,
+                senderPortal: "resident",
                 attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
               }),
             });
@@ -867,10 +877,11 @@ export const ResidentInboxPanel = forwardRef<
                 threadId: thread.id,
                 subject,
                 text,
-                toEmails: [thread.email],
+                toEmails: [replyToEmail],
                 deliverToPortalInbox: false,
                 deliverViaEmail: false,
                 deliverViaSms: true,
+                senderPortal: "resident",
                 attachmentUrls: attachmentUrls.length ? attachmentUrls : undefined,
               }),
             });
@@ -915,7 +926,7 @@ export const ResidentInboxPanel = forwardRef<
       void syncPersistedInboxFromServer(RESIDENT_INBOX_STORAGE_KEY, { force: true }).catch(() => {});
       return { emailRequested: channels.email, smsRequested: channels.sms, emailOk, smsOk };
     },
-    [activeSmsAvailable],
+    [activeSmsAvailable, eligibleContacts],
   );
 
   const threadActionBtn = embeddedInCommunication ? "min-h-0 rounded-full px-3 py-1.5 text-xs" : PORTAL_DETAIL_BTN;

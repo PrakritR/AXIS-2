@@ -33,6 +33,8 @@ export function PortalListAddRow({
   disabled = false,
   dataAttr,
   className,
+  /** Dashed box only — no icon or label (still uses `label` for accessibility). */
+  bare = false,
 }: {
   label: string;
   icon?: LucideIcon;
@@ -42,6 +44,7 @@ export function PortalListAddRow({
   disabled?: boolean;
   dataAttr?: string;
   className?: string;
+  bare?: boolean;
 }) {
   const displayLabel = label.trim().toUpperCase();
   const hintText = hint?.trim();
@@ -52,15 +55,20 @@ export function PortalListAddRow({
       data-attr={dataAttr}
       disabled={disabled}
       onClick={onClick}
+      aria-label={label}
       className={cn(PORTAL_LIST_ADD_ROW_CLASS, className)}
     >
-      <Icon className="h-8 w-8 text-primary" strokeWidth={1.35} aria-hidden />
-      <span className="flex flex-col items-center gap-1">
-        <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">{displayLabel}</span>
-        {hintText ? (
-          <span className="text-xs font-medium normal-case tracking-normal text-muted">{hintText}</span>
-        ) : null}
-      </span>
+      {bare ? null : (
+        <>
+          <Icon className="h-8 w-8 text-primary" strokeWidth={1.35} aria-hidden />
+          <span className="flex flex-col items-center gap-1">
+            <span className="text-[11px] font-bold uppercase tracking-[0.16em] text-primary">{displayLabel}</span>
+            {hintText ? (
+              <span className="text-xs font-medium normal-case tracking-normal text-muted">{hintText}</span>
+            ) : null}
+          </span>
+        </>
+      )}
     </button>
   );
 }

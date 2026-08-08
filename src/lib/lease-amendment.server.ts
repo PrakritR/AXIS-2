@@ -1,7 +1,7 @@
 import { formatPacificDate } from "@/lib/pacific-time";
 import { buildAiGeneratedLeaseHtml, leaseContextFromApplication } from "@/lib/generated-lease";
 import { normalizeManagerListingSubmissionV1 } from "@/lib/manager-listing-submission";
-import type { LeasePipelineRow } from "@/lib/lease-pipeline-storage";
+import type { LeasePipelineRow, SignedLeaseSnapshot } from "@/lib/lease-pipeline-storage";
 import type { MockProperty } from "@/data/types";
 import type { ManagerListingSubmissionV1, ManagerRoomUnavailableRange } from "@/lib/manager-listing-submission";
 import type { SupabaseClient } from "@supabase/supabase-js";
@@ -21,6 +21,25 @@ export function hasBothLeaseSignatures(row: LeasePipelineRow): boolean {
   const legacyName = typeof row.signatureName === "string" ? row.signatureName : null;
   const legacyAt = typeof row.signedAtIso === "string" ? row.signedAtIso : null;
   return Boolean(mgr?.name && mgr?.signedAtIso && ((res?.name && res?.signedAtIso) || (legacyName && legacyAt)));
+}
+
+function archiveSignedLeaseSnapshot(leaseRow: LeasePipelineRow): SignedLeaseSnapshot[] {
+  if (!hasBothLeaseSignatures(leaseRow)) return leaseRow.signedLeaseSnapshots ?? [];
+  const signedAt = leaseRow.fullySignedAt ?? leaseRow.updatedAtIso ?? new Date().toISOString();
+  const term = leaseRow.application?.leaseTerm ?? "";
+  const end = leaseRow.application?.leaseEnd ?? "";
+  const snapshot: SignedLeaseSnapshot = {
+    id: `snap-${Date.now().toString(36)}`,
+    label: `Prior lease${term ? ` · ${term}` : ""}${end ? ` · ends ${end}` : ""}`,
+    fullySignedAt: signedAt,
+    leaseTerm: term || undefined,
+    leaseStart: leaseRow.application?.leaseStart,
+    leaseEnd: end || undefined,
+    generatedHtml: leaseRow.generatedHtml ?? null,
+    managerUploadedPdf: leaseRow.managerUploadedPdf ?? null,
+    archivedAtIso: new Date().toISOString(),
+  };
+  return [...(leaseRow.signedLeaseSnapshots ?? []), snapshot];
 }
 
 function rangesOverlap(aStart: string, aEnd: string, bStart: string, bEnd: string): boolean {
@@ -279,10 +298,12 @@ export async function amendLeaseMoveOutDate(
   const updatedApplication = { ...(leaseRow.application ?? {}), leaseEnd: newLeaseEnd };
   const iso = new Date().toISOString();
   const regeneratedDocument = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
+  const signedLeaseSnapshots = archiveSignedLeaseSnapshot(leaseRow);
 
   const updatedRow: Partial<LeasePipelineRow> = {
     ...leaseRow,
     application: updatedApplication,
+    signedLeaseSnapshots,
     managerSignature: null,
     residentSignature: null,
     signatureName: null,
@@ -418,12 +439,14 @@ export async function renewLease(
   }
 
   const regeneratedDocument = await regenerateLeaseHtmlForApplication(db, leaseRecord, leaseRow, updatedApplication);
+  const signedLeaseSnapshots = archiveSignedLeaseSnapshot(leaseRow);
 
   const updatedRow: Partial<LeasePipelineRow> = {
     ...leaseRow,
     application: updatedApplication,
     ...(rentLabel ? { signedRentLabel: rentLabel } : {}),
     pendingRenewal: { ...terms, requestedAtIso: iso },
+    signedLeaseSnapshots,
     managerSignature: null,
     residentSignature: null,
     signatureName: null,

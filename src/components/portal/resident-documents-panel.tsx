@@ -19,8 +19,12 @@ import {
   ResidentOtherDocumentsTable,
   triggerDocumentDownload,
 } from "@/components/portal/resident-other-documents";
-import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
+import { ApplicationDocumentPreview, ApplicationPdfDownloadButton } from "@/components/portal/manager-applications";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
+import { PORTAL_DETAIL_BTN } from "@/components/portal/portal-data-table";
+import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { buildResidentLeaseDocumentRows, resolveResidentLeaseDocumentView } from "@/lib/resident-lease-documents";
 import { ListSkeleton } from "@/components/ui/list-skeleton";
 import { buildRentReceiptHtml } from "@/lib/rent-receipt-html";
 import { buildReceiptRows, type ReceiptRow } from "@/lib/rent-receipts";
@@ -51,8 +55,6 @@ import {
   LEASE_PIPELINE_EVENT,
   runLeaseDownload,
   findLeaseForResidentEmail,
-  getLeaseDocumentHtml,
-  hasBothLeaseSignatures,
   syncLeasePipelineFromServer,
   type LeasePipelineRow,
 } from "@/lib/lease-pipeline-storage";
@@ -218,15 +220,20 @@ function ResidentApplicationDocumentDetail({
       bareHeader
       dataAttrBack="resident-documents-application-detail-back"
       pinScrollBody
+      footer={
+        <ApplicationPdfDownloadButton
+          row={row}
+          label="Download application"
+          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+        />
+      }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
         <ApplicationDocumentPreview
           row={row}
           collapsible={false}
-          showDownload
-          downloadLabel="Download application"
+          showDownload={false}
           variant="pdf"
-          downloadPlacement="bottom"
           bareCanvas
         />
       </div>
@@ -239,7 +246,7 @@ function receiptPdfHref(date: string): string {
   return `/api/reports/resident-ledger/export?${params.toString()}`;
 }
 
-function useResidentSignedLeaseRow(): LeasePipelineRow | null {
+function useResidentLeaseDocumentSource(): LeasePipelineRow | null {
   const session = usePortalSession();
   const email = session.email?.trim() ?? "";
   const [tick, setTick] = useState(0);
@@ -317,16 +324,17 @@ function useResidentSignedLeaseRow(): LeasePipelineRow | null {
       residentAxisId,
       profileManagerId,
     });
-    return row && hasBothLeaseSignatures(row) ? row : null;
+    return row ?? null;
   }, [axisResolved, email, profileManagerId, residentAxisId, tick]);
 }
 
 function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; basePath: string }) {
   const { showToast } = useAppUi();
-  const row = useResidentSignedLeaseRow();
+  const row = useResidentLeaseDocumentSource();
   const listHref = residentDocumentsLeaseListHref(basePath);
+  const view = useMemo(() => resolveResidentLeaseDocumentView(row, leaseId), [row, leaseId]);
 
-  if (!row || row.id !== leaseId) {
+  if (!row || !view) {
     return (
       <PortalRecordDetailPage
         pageTitle="Documents"
@@ -344,30 +352,46 @@ function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; b
     );
   }
 
-  const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
-  const leaseHtml = pdfSrc ? null : getLeaseDocumentHtml(row);
-  const signedAt = row.fullySignedAt ?? row.updatedAtIso;
-  const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
+  const downloadTarget =
+    view.pipelineRow ??
+    ({
+      ...row,
+      generatedHtml: leaseHtml,
+      managerUploadedPdf: pdfSrc
+        ? { dataUrl: pdfSrc, fileName: "lease.pdf", uploadedAt: view.subtitle }
+        : row.managerUploadedPdf,
+    } as typeof row);
 
   return (
     <PortalRecordDetailPage
       pageTitle="Documents"
-      title={leaseName}
-      subtitle={`Fully signed · ${safeFormatDateTime(signedAt)}`}
+      title={view.title}
+      subtitle={view.subtitle}
       backHref={listHref}
       hideBackText
       bareHeader
       dataAttrBack="resident-documents-lease-detail-back"
       pinScrollBody
+      footer={
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          data-attr="resident-documents-lease-download-pdf"
+          onClick={() => runLeaseDownload(downloadTarget, showToast)}
+        >
+          {view.pdfSrc ? "Download lease" : "Download / print lease"}
+        </Button>
+      }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
         <DocumentInlineViewer
           embedded
-          actionsPlacement="bottom"
-          title={leaseName}
-          src={pdfSrc}
-          srcDoc={leaseHtml}
-          onDownload={() => runLeaseDownload(row, showToast)}
+          hideActions
+          title={view.title}
+          src={view.pdfSrc}
+          srcDoc={view.leaseHtml}
+          onDownload={() => runLeaseDownload(downloadTarget, showToast)}
           downloadLabel={pdfSrc ? "Download lease" : "Download / print lease"}
           downloadAttr="resident-documents-lease-download-pdf"
         />
@@ -497,11 +521,22 @@ function ResidentReceiptDocumentDetail({ receiptId, basePath }: { receiptId: str
       bareHeader
       dataAttrBack="resident-documents-receipt-detail-back"
       pinScrollBody
+      footer={
+        <Button
+          type="button"
+          variant="outline"
+          className={cn(PORTAL_DETAIL_BTN, "flex-1")}
+          data-attr="resident-documents-receipt-download"
+          onClick={() => downloadReceipt(receipt)}
+        >
+          Download receipt
+        </Button>
+      }
     >
       <div className="px-3 pb-6 pt-2 sm:px-4">
         <DocumentInlineViewer
           embedded
-          actionsPlacement="bottom"
+          hideActions
           title={`${title} ${receipt.date}`}
           srcDoc={buildRentReceiptHtml({
             residentName: demoMode ? DEMO_RESIDENT_NAME : sessionEmail || undefined,
@@ -650,15 +685,12 @@ function RentReceiptsTab({ basePath }: { basePath: string }) {
  */
 function SignedLeaseDocumentsTable({ basePath }: { basePath: string }) {
   const navigate = usePortalNavigate();
-  const row = useResidentSignedLeaseRow();
+  const row = useResidentLeaseDocumentSource();
+  const documentRows = useMemo(() => buildResidentLeaseDocumentRows(row), [row]);
 
-  if (!row) {
+  if (documentRows.length === 0) {
     return <PortalDataTableEmpty icon="lease" message="Your signed lease will appear here once it's signed." />;
   }
-
-  const signedAt = row.fullySignedAt ?? row.updatedAtIso;
-  const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
-  const openLease = () => navigate(residentDocumentsLeaseDetailHref(basePath, row.id));
 
   return (
     <DocumentsTableShell
@@ -671,31 +703,29 @@ function SignedLeaseDocumentsTable({ basePath }: { basePath: string }) {
           <th className={`${MANAGER_TABLE_TH} text-left`}>Date signed</th>
         </>
       }
-      rows={[
-        {
-          key: row.id,
-          expanded: false,
-          detail: null,
-          onToggle: openLease,
-          cells: (
-            <>
-              <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                <span className="min-w-0 truncate font-medium text-foreground">{leaseName}</span>
-              </td>
-              <td className={`${PORTAL_TABLE_TD} align-middle`}>Fully signed</td>
-              <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(signedAt)}</td>
-            </>
-          ),
-          card: (
-            <PortalMobileSummaryCard
-              title={leaseName}
-              subtitle="Fully signed"
-              meta={safeFormatDateTime(signedAt)}
-              onClick={openLease}
-            />
-          ),
-        },
-      ]}
+      rows={documentRows.map((entry) => ({
+        key: entry.id,
+        expanded: false,
+        detail: null,
+        onToggle: () => navigate(residentDocumentsLeaseDetailHref(basePath, entry.id)),
+        cells: (
+          <>
+            <td className={`${PORTAL_TABLE_TD} align-middle`}>
+              <span className="min-w-0 truncate font-medium text-foreground">{entry.label}</span>
+            </td>
+            <td className={`${PORTAL_TABLE_TD} align-middle`}>{entry.status}</td>
+            <td className={`${PORTAL_TABLE_TD} align-middle`}>{safeFormatDateTime(entry.signedAt)}</td>
+          </>
+        ),
+        card: (
+          <PortalMobileSummaryCard
+            title={entry.label}
+            subtitle={entry.status}
+            meta={safeFormatDateTime(entry.signedAt)}
+            onClick={() => navigate(residentDocumentsLeaseDetailHref(basePath, entry.id))}
+          />
+        ),
+      }))}
     />
   );
 }

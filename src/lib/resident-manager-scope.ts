@@ -35,7 +35,8 @@ export async function managerIdsOwningResident(
     .eq("resident_email", email);
   for (const row of apps ?? []) {
     const rowData = (row.row_data ?? {}) as Record<string, unknown>;
-    if (rowData.bucket !== "approved") continue;
+    const bucket = applicationBucket(rowData);
+    if (!applicationLinksResidentToManager(bucket)) continue;
     const id = String(row.manager_user_id ?? "").trim();
     if (id) ids.add(id);
   }
@@ -80,6 +81,10 @@ type ApplicationScopeRow = {
 export function applicationBucket(rowData: unknown): string {
   if (!rowData || typeof rowData !== "object" || Array.isArray(rowData)) return "";
   return String((rowData as { bucket?: string }).bucket ?? "").trim().toLowerCase();
+}
+
+function applicationLinksResidentToManager(bucket: string): boolean {
+  return bucket !== "rejected" && bucket !== "withdrawn";
 }
 
 export function isApprovedApplicationRow(row: { row_data?: unknown }): boolean {
