@@ -29,12 +29,13 @@ vi.mock("@/lib/supabase/service", () => ({
 }));
 vi.mock("@/lib/tour-resident-link.server", () => ({
   loadResidentTourViews: vi.fn(),
+  linkAllTourInquiriesForEmail: vi.fn(),
 }));
 
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { loadResidentTourViews } from "@/lib/tour-resident-link.server";
+import { loadResidentTourViews, linkAllTourInquiriesForEmail } from "@/lib/tour-resident-link.server";
 
 function signInResident() {
   vi.mocked(createSupabaseServiceRoleClient).mockReturnValue({} as never);
@@ -87,6 +88,7 @@ describe("GET /api/portal-resident-tours never reports a failure as zero tours",
 
   it("still answers 200 with an empty list when the resident genuinely has no tours", async () => {
     signInResident();
+    vi.mocked(linkAllTourInquiriesForEmail).mockResolvedValue([]);
     vi.mocked(loadResidentTourViews).mockResolvedValue([] as never);
 
     const res = await getResidentTours();
@@ -95,5 +97,9 @@ describe("GET /api/portal-resident-tours never reports a failure as zero tours",
     const body = (await res.json()) as { tours: unknown[]; degraded?: boolean };
     expect(body.tours).toEqual([]);
     expect(body.degraded).toBeUndefined();
+    expect(linkAllTourInquiriesForEmail).toHaveBeenCalledWith(expect.anything(), {
+      userId: "res-1",
+      email: "res@example.com",
+    });
   });
 });

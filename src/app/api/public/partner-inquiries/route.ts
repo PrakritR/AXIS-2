@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import {
   adminHasPublishedSlot,
@@ -11,6 +12,7 @@ import { notifyManagerTourRequest, notifyTenantTourRequestReceived } from "@/lib
 import { loadManagerAutomationSettings } from "@/lib/payment-automation-settings";
 import { proposeTourConfirmation } from "@/lib/tour-proposal.server";
 import { normalizeTourContactPhone, validateTourContactFields } from "@/lib/tour-contact-quality";
+import { linkTourInquiryToResident } from "@/lib/tour-resident-link.server";
 
 export const runtime = "nodejs";
 
@@ -134,6 +136,10 @@ async function hasManagerTourConflict(
   return false;
 }
 
+function normalizeEmail(value: string | null | undefined): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
 export async function POST(req: Request) {
   try {
     if (!rateLimit(`partner-inquiries:${clientIpFrom(req)}`, 30, 60_000).ok) {
@@ -146,6 +152,27 @@ export async function POST(req: Request) {
     }
 
     const incoming = body.row as Record<string, unknown> & PartnerInquiryRow;
+
+    let linkingUserId: string | null = null;
+    let linkingEmail: string | null = null;
+    try {
+      const ctx = await getPortalAccessContext();
+      if (ctx.user) {
+        const accountEmail = normalizeEmail(ctx.profile?.email ?? ctx.user.email);
+        if (accountEmail.includes("@")) {
+          if (textValue(incoming.kind) === "tour") {
+            incoming.email = accountEmail;
+          }
+          if (hasRole(ctx, "resident")) {
+            linkingUserId = ctx.user.id;
+            linkingEmail = accountEmail;
+          }
+        }
+      }
+    } catch {
+      /* optional session — public route still accepts anonymous tour requests */
+    }
+
     const id = typeof incoming.id === "string" && incoming.id.trim() ? incoming.id.trim() : crypto.randomUUID();
     // Coerce the opt-in to a strict boolean so the send-time gate can never be
     // tricked by a truthy non-boolean; stamp the decision time for provable
@@ -307,6 +334,14 @@ export async function POST(req: Request) {
           await proposeTourConfirmation(db, { inquiry: row, managerUserId, requestedWindows });
         })().catch(() => undefined);
       }
+    }
+
+    if (linkingUserId && linkingEmail && textValue(row.kind) === "tour") {
+      void linkTourInquiryToResident(db, {
+        userId: linkingUserId,
+        inquiryId: id,
+        email: linkingEmail,
+      }).catch(() => undefined);
     }
 
     return NextResponse.json({ ok: true, row });

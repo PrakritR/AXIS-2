@@ -55,7 +55,7 @@ export function SignedInResidentAccountPrompt({
   };
 
   return (
-    <div className="mb-6 rounded-2xl border border-border bg-card p-5 shadow-[0_16px_48px_-28px_rgba(15,23,42,0.18)] sm:rounded-3xl sm:p-6">
+    <div className="mx-auto w-full max-w-3xl py-2 sm:py-4">
       <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-primary">You&apos;re signed in</p>
       <h2 className="mt-2 text-lg font-bold tracking-tight text-foreground sm:text-xl">
         Create your resident account to apply

@@ -57,6 +57,17 @@ vi.mock("@/lib/tour-proposal.server", () => ({
   proposeTourConfirmation: vi.fn(async () => undefined),
 }));
 
+vi.mock("@/lib/auth/portal-access", () => ({
+  getPortalAccessContext: vi.fn(),
+  hasRole: vi.fn(),
+}));
+
+const linkTourInquiryToResident = vi.fn(async () => ({ ok: true, linked: true, inquiryId: "inq-1" }));
+vi.mock("@/lib/tour-resident-link.server", () => ({
+  linkTourInquiryToResident: (...args: unknown[]) => linkTourInquiryToResident(...(args as [])),
+}));
+
+import { getPortalAccessContext, hasRole } from "@/lib/auth/portal-access";
 import { POST } from "@/app/api/public/partner-inquiries/route";
 
 function makeRow(overrides: Record<string, unknown>) {
@@ -104,6 +115,14 @@ describe("partner-inquiries route SMS consent persistence", () => {
   beforeEach(() => {
     recordOptIn.mockClear();
     upsertCalls.length = 0;
+    linkTourInquiryToResident.mockClear();
+    vi.mocked(getPortalAccessContext).mockResolvedValue({
+      user: null,
+      profile: null,
+      roles: [],
+      effectiveRole: null,
+    } as never);
+    vi.mocked(hasRole).mockReturnValue(false);
   });
 
   it("persists consent + a server-stamped timestamp and records opt-in when the box is checked", async () => {
@@ -159,5 +178,34 @@ describe("partner-inquiries route SMS consent persistence", () => {
     expect(persisted.smsConsent).toBe(true);
     expect(typeof persisted.smsConsentAt).toBe("string");
     expect(Number.isNaN(Date.parse(persisted.smsConsentAt as string))).toBe(false);
+  });
+});
+
+describe("partner-inquiries route resident tour linking", () => {
+  beforeEach(() => {
+    recordOptIn.mockClear();
+    upsertCalls.length = 0;
+    linkTourInquiryToResident.mockClear();
+    vi.mocked(getPortalAccessContext).mockResolvedValue({
+      user: { id: "res-1", email: "resident@example.com" },
+      profile: { email: "resident@example.com" },
+      roles: ["resident"],
+      effectiveRole: "resident",
+    } as never);
+    vi.mocked(hasRole).mockImplementation((_ctx, role) => role === "resident");
+  });
+
+  it("pins the account email and links the inquiry for a signed-in resident", async () => {
+    const res = await postWith(makeRow({ email: "other@example.com" }));
+    expect(res.status).toBe(200);
+
+    const persisted = lastPersistedInquiry();
+    expect(persisted.email).toBe("resident@example.com");
+
+    expect(linkTourInquiryToResident).toHaveBeenCalledWith(expect.anything(), {
+      userId: "res-1",
+      inquiryId: "inq-1",
+      email: "resident@example.com",
+    });
   });
 });

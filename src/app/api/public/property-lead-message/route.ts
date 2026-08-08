@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { notifyProspectPropertyMessageHandoff } from "@/lib/property-lead-prospect-handoff.server";
 import { notifyManagerPropertyLeadMessage } from "@/lib/property-lead-notification.server";
 import { recordResidentProspectInboxMessage } from "@/lib/tour-notification-delivery.server";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
@@ -102,6 +103,15 @@ export async function POST(req: Request) {
         message,
       ].join("\n"),
     });
+
+    void notifyProspectPropertyMessageHandoff({
+      name,
+      email,
+      phone: phone || undefined,
+      smsConsent,
+      propertyTitle,
+      topic,
+    }).catch(() => undefined);
 
     return NextResponse.json({ ok: true });
   } catch (e) {

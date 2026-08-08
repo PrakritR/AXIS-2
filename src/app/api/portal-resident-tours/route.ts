@@ -3,14 +3,14 @@ import { getAdminPreviewFromCookies } from "@/lib/auth/admin-preview";
 import { getEffectiveSessionForPortal } from "@/lib/auth/effective-session";
 import { getPortalAccessContext, hasAdminRole, hasRole } from "@/lib/auth/portal-access";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
-import { loadResidentTourViews } from "@/lib/tour-resident-link.server";
+import { loadResidentTourViews, linkAllTourInquiriesForEmail } from "@/lib/tour-resident-link.server";
 
 export const runtime = "nodejs";
 
 /** Scoped tour list for the signed-in resident — linked inquiry ids only. */
 export async function GET() {
   try {
-    const { user } = await getEffectiveSessionForPortal("resident");
+    const { user, profile } = await getEffectiveSessionForPortal("resident");
     if (!user) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
     const ctx = await getPortalAccessContext();
     const preview = await getAdminPreviewFromCookies();
@@ -21,6 +21,10 @@ export async function GET() {
     }
 
     const db = createSupabaseServiceRoleClient();
+    const email = (profile?.email ?? user.email ?? "").trim().toLowerCase();
+    if (email.includes("@")) {
+      await linkAllTourInquiriesForEmail(db, { userId: user.id, email });
+    }
     const tours = await loadResidentTourViews(db, user.id);
     return NextResponse.json({ tours });
   } catch (e) {

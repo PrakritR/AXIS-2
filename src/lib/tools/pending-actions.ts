@@ -16,6 +16,122 @@ import type { ActionPreview } from "./registry";
 
 type Db = ReturnType<typeof createSupabaseServiceRoleClient>;
 
+/** Live chat proposals expire after 15 minutes unless a caller overrides. */
+export const CHAT_PENDING_ACTION_TTL_MS = 15 * 60_000;
+
+type DatabaseError = { code?: string | null; message?: string | null; details?: string | null };
+
+function isMissingColumn(error: unknown, column: string): boolean {
+  const candidate = error as DatabaseError | null;
+  const detail = `${candidate?.message ?? ""} ${candidate?.details ?? ""}`.toLowerCase();
+  return detail.includes(column.toLowerCase()) && (detail.includes("column") || candidate?.code === "PGRST204");
+}
+
+function isForeignKeyViolation(error: unknown): boolean {
+  return (error as DatabaseError | null)?.code === "23503";
+}
+
+function pendingActionInsertPayload(
+  args: {
+    landlordId: string;
+    userId: string;
+    toolName: string;
+    input: unknown;
+    preview: ActionPreview;
+    portal?: AgentPortal;
+    sessionId?: string | null;
+    expiresInMs?: number;
+    proposalTraceId?: string | null;
+  },
+  opts: { includeSessionId: boolean; includeProposalTraceId: boolean; includePortal: boolean },
+): Record<string, unknown> {
+  const row: Record<string, unknown> = {
+    landlord_id: args.landlordId || args.userId,
+    user_id: args.userId,
+    tool_name: args.toolName,
+    input: args.input,
+    preview: args.preview,
+  };
+  if (opts.includePortal) row.portal = args.portal ?? "manager";
+  if (opts.includeSessionId && args.sessionId) row.session_id = args.sessionId;
+  if (opts.includeProposalTraceId && args.proposalTraceId) row.proposal_trace_id = args.proposalTraceId;
+  if (args.expiresInMs && args.expiresInMs > 0) {
+    row.expires_at = new Date(Date.now() + args.expiresInMs).toISOString();
+  }
+  return row;
+}
+
+/**
+ * Insert with bounded fallbacks for schema drift and optional FK columns.
+ * Production once lacked `portal` / `session_id`; later deploys can race ahead
+ * of `proposal_trace_id`. A stale client session id must not block the card.
+ */
+async function insertPendingActionRow(
+  db: Db,
+  args: Parameters<typeof createPendingActionForUser>[1],
+): Promise<{ id: string | null; lastError: DatabaseError | null }> {
+  const attempts: Array<{
+    payload: Record<string, unknown>;
+    label: string;
+  }> = [
+    {
+      label: "full",
+      payload: pendingActionInsertPayload(args, {
+        includePortal: true,
+        includeSessionId: true,
+        includeProposalTraceId: true,
+      }),
+    },
+    {
+      label: "without proposal_trace_id",
+      payload: pendingActionInsertPayload(args, {
+        includePortal: true,
+        includeSessionId: true,
+        includeProposalTraceId: false,
+      }),
+    },
+    {
+      label: "without session_id",
+      payload: pendingActionInsertPayload(args, {
+        includePortal: true,
+        includeSessionId: false,
+        includeProposalTraceId: false,
+      }),
+    },
+    {
+      label: "without portal",
+      payload: pendingActionInsertPayload(args, {
+        includePortal: false,
+        includeSessionId: false,
+        includeProposalTraceId: false,
+      }),
+    },
+  ];
+
+  let lastError: DatabaseError | null = null;
+  for (const attempt of attempts) {
+    const { data, error } = await db.from("agent_pending_actions").insert(attempt.payload).select("id").single();
+    if (!error && data?.id) {
+      if (attempt.label !== "full") {
+        console.warn("[agent] pending action insert succeeded after fallback", {
+          tool: args.toolName,
+          portal: args.portal ?? "manager",
+          fallback: attempt.label,
+        });
+      }
+      return { id: String(data.id), lastError: null };
+    }
+    lastError = (error as DatabaseError | null) ?? { message: "no row returned" };
+    const recoverable =
+      isForeignKeyViolation(error) ||
+      isMissingColumn(error, "proposal_trace_id") ||
+      isMissingColumn(error, "session_id") ||
+      isMissingColumn(error, "portal");
+    if (!recoverable) break;
+  }
+  return { id: null, lastError };
+}
+
 /** Which portal's registry + context resolver owns the action. */
 export type AgentPortal = "manager" | "resident" | "vendor";
 
@@ -55,38 +171,20 @@ export async function createPendingActionForUser(
     proposalTraceId?: string | null;
   },
 ): Promise<string | null> {
-  const row: Record<string, unknown> = {
-    // `landlord_id` is `uuid not null`. A manager's landlordId is their own id;
-    // a resident's is their linked manager. A vendor (and an unlinked resident)
-    // has no landlord, so the row is anchored to the actor instead — `user_id`
-    // is what actually gates the claim below.
-    landlord_id: args.landlordId || args.userId,
-    user_id: args.userId,
+  const expiresInMs = args.expiresInMs && args.expiresInMs > 0 ? args.expiresInMs : CHAT_PENDING_ACTION_TTL_MS;
+  const { id, lastError } = await insertPendingActionRow(db, { ...args, expiresInMs });
+  if (id) return id;
+  // Never swallow this silently: a null here becomes the user-facing "could not
+  // show the confirmation card" fallback, so the real reason (a schema drift, an
+  // FK violation, RLS) must be diagnosable from the logs. Input/preview are
+  // deliberately omitted — they can carry resident/applicant PII.
+  console.error("[agent] pending action insert failed", {
+    tool: args.toolName,
     portal: args.portal ?? "manager",
-    tool_name: args.toolName,
-    input: args.input,
-    preview: args.preview,
-  };
-  if (args.sessionId) row.session_id = args.sessionId;
-  if (args.proposalTraceId) row.proposal_trace_id = args.proposalTraceId;
-  if (args.expiresInMs && args.expiresInMs > 0) {
-    row.expires_at = new Date(Date.now() + args.expiresInMs).toISOString();
-  }
-  const { data, error } = await db.from("agent_pending_actions").insert(row).select("id").single();
-  if (error || !data?.id) {
-    // Never swallow this silently: a null here becomes the user-facing "could not
-    // show the confirmation card" fallback, so the real reason (a schema drift, an
-    // FK violation, RLS) must be diagnosable from the logs. Input/preview are
-    // deliberately omitted — they can carry resident/applicant PII.
-    console.error("[agent] pending action insert failed", {
-      tool: args.toolName,
-      portal: args.portal ?? "manager",
-      error: error?.message ?? "no row returned",
-      code: (error as { code?: string } | null)?.code,
-    });
-    return null;
-  }
-  return String(data.id);
+    error: lastError?.message ?? "no row returned",
+    code: lastError?.code,
+  });
+  return null;
 }
 
 export async function createPendingAction(
@@ -105,6 +203,7 @@ export async function createPendingAction(
     portal: opts.portal,
     sessionId: opts.sessionId,
     proposalTraceId: opts.proposalTraceId,
+    expiresInMs: CHAT_PENDING_ACTION_TTL_MS,
   });
 }
 

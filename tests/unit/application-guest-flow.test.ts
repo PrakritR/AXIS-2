@@ -52,9 +52,9 @@ describe("in-progress draft sync eligibility", () => {
 });
 
 describe("public apply session", () => {
-  it("builds sign-in href with return to apply", () => {
+  it("builds sign-in href with return to in-portal apply", () => {
     expect(publicApplySignInHref("prop-9")).toBe(
-      "/auth/sign-in?intent=resident&next=%2Frent%2Fapply%3FpropertyId%3Dprop-9",
+      "/auth/sign-in?intent=resident&next=%2Fresident%2Fapplications%2Fapply%3FpropertyId%3Dprop-9",
     );
   });
 

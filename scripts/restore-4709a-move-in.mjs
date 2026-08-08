@@ -2,10 +2,13 @@
 /**
  * Update 4709A 8th Ave NE move-in instructions (front door + per-room locker combos).
  *
+ * Dev/test only — refuses the production Supabase project unless
+ * ALLOW_PRODUCTION_LISTING_WRITE=1 (captain-approved).
+ *
  * Usage:
  *   node --env-file=.env.local scripts/restore-4709a-move-in.mjs
- *   node --env-file=.env.production.local scripts/restore-4709a-move-in.mjs
  */
+import { refuseProductionListingWrites } from "./lib/refuse-production-listing-writes.mjs";
 import {
   A4709A_PROPERTY_ID,
   apply4709aMoveInInstructions,
@@ -17,6 +20,7 @@ if (!url || !key) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   process.exit(1);
 }
+refuseProductionListingWrites(url, "restore-4709a-move-in.mjs");
 
 async function api(pathname, options = {}) {
   const res = await fetch(`${url}${pathname}`, {

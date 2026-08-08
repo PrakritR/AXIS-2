@@ -37,7 +37,9 @@ export async function middleware(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
   if (!url || !anon) {
-    return supabaseResponse;
+    const response = NextResponse.next({ request });
+    response.headers.set("x-pathname", path);
+    return response;
   }
 
   const supabase = createServerClient(url, anon, {
@@ -68,6 +70,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(redirectUrl);
   }
 
+  supabaseResponse.headers.set("x-pathname", path);
   return supabaseResponse;
 }
 

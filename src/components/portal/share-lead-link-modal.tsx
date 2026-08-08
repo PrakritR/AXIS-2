@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { Modal, ModalFooter } from "@/components/ui/modal";
 import { Input, Select } from "@/components/ui/input";
@@ -117,26 +117,43 @@ export function ShareLeadLinkModal({
   const [note, setNote] = useState("");
   const [sendPreviewOpen, setSendPreviewOpen] = useState(false);
   const [sendBusy, setSendBusy] = useState(false);
+  const wasOpenRef = useRef(false);
+
+  // Reset only when the modal opens — not when `properties` re-hydrates from a
+  // background portfolio sync while the user is picking listings (that used to
+  // snap the selection back to properties[0], e.g. 4709A).
+  useEffect(() => {
+    if (!open) {
+      wasOpenRef.current = false;
+      return;
+    }
+    if (wasOpenRef.current) return;
+    wasOpenRef.current = true;
+
+    const initialId =
+      preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
+        ? preselectedPropertyId
+        : properties[0]?.id ?? "";
+    setPropertyIds(initialId ? [initialId] : []);
+    setRoomChoice("");
+    setApplyRentalTypes(["standard"]);
+    setProspectName("");
+    setProspectEmail("");
+    setProspectPhone("");
+    setSendVia(["email"]);
+    setNote("");
+    setSendPreviewOpen(false);
+    setSendBusy(false);
+  }, [open, preselectedPropertyId, properties]);
 
   useEffect(() => {
     if (!open) return;
-    void Promise.resolve().then(() => {
-      const initialId =
-        preselectedPropertyId && properties.some((p) => p.id === preselectedPropertyId)
-          ? preselectedPropertyId
-          : properties[0]?.id ?? "";
-      setPropertyIds(initialId ? [initialId] : []);
-      setRoomChoice("");
-      setApplyRentalTypes(["standard"]);
-      setProspectName("");
-      setProspectEmail("");
-      setProspectPhone("");
-      setSendVia(["email"]);
-      setNote("");
-      setSendPreviewOpen(false);
-      setSendBusy(false);
+    const valid = new Set(properties.map((p) => p.id));
+    setPropertyIds((prev) => {
+      const next = prev.filter((id) => valid.has(id));
+      return next.length === prev.length ? prev : next;
     });
-  }, [open, kind, preselectedPropertyId, properties]);
+  }, [open, properties]);
 
   useEffect(() => {
     if (!open) return;

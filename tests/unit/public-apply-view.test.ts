@@ -15,6 +15,17 @@ import {
 describe("resolvePublicApplyView", () => {
   const propertyId = "mgr-seed-4709a-8th-ave-ne";
 
+  it("routes a signed-in resident with a property link straight to the wizard", () => {
+    expect(
+      resolvePublicApplyView({
+        gateKey: propertyId,
+        guestContinue: false,
+        signedInNonResident: false,
+        hasResidentRole: true,
+      }),
+    ).toBe("wizard");
+  });
+
   it("routes a signed-in non-resident to create a resident account (the fixed blank-page case)", () => {
     expect(
       resolvePublicApplyView({ gateKey: propertyId, guestContinue: false, signedInNonResident: true }),
@@ -33,6 +44,9 @@ describe("resolvePublicApplyView", () => {
     expect(
       resolvePublicApplyView({ gateKey, guestContinue: false, signedInNonResident: true }),
     ).toBe("signed-in-create-resident");
+    expect(publicApplyReturnPath({ propertyId })).toBe(
+      `/resident/applications/apply?propertyId=${propertyId}`,
+    );
     expect(publicApplyReturnPath({ portfolioPropertyIds: ["mgr-b", "mgr-a"] })).toBe(
       "/rent/apply?ids=mgr-a%2Cmgr-b",
     );

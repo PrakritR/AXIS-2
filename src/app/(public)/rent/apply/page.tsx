@@ -20,9 +20,13 @@ export default async function ApplyPage({
 }) {
   const params = await searchParams;
   const applyPath = `/resident/applications/apply${buildApplySearch(params)}`;
+  const hasPropertyLink = Boolean(
+    (typeof params.propertyId === "string" && params.propertyId.trim()) ||
+      (typeof params.ids === "string" && params.ids.trim()),
+  );
 
   const ctx = await getPortalAccessContext();
-  if (ctx.user && hasRole(ctx, "resident")) {
+  if (ctx.user && (hasRole(ctx, "resident") || hasPropertyLink)) {
     redirect(applyPath);
   }
 

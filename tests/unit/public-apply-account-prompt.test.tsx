@@ -30,12 +30,12 @@ describe("publicApply href helpers carry listing context", () => {
     expect(href).toContain("role=resident");
     // next must round-trip back to this listing's application
     const next = new URL(href, "http://x").searchParams.get("next");
-    expect(next).toBe(`/rent/apply?propertyId=${PROPERTY_ID}`);
+    expect(next).toBe(`/resident/applications/apply?propertyId=${PROPERTY_ID}`);
   });
 
   it("sign-in href carries the same apply next for returning residents", () => {
     const next = new URL(publicApplySignInHref(PROPERTY_ID), "http://x").searchParams.get("next");
-    expect(next).toBe(`/rent/apply?propertyId=${PROPERTY_ID}`);
+    expect(next).toBe(`/resident/applications/apply?propertyId=${PROPERTY_ID}`);
   });
 });
 
@@ -50,7 +50,7 @@ describe("PublicApplyAccountPrompt renders three ordered actions", () => {
   afterEach(() => cleanup());
 
   it("offers Create account (primary), Sign in, and guest — with create carrying context", async () => {
-    const returnPath = `/rent/apply?propertyId=${PROPERTY_ID}`;
+    const returnPath = `/resident/applications/apply?propertyId=${PROPERTY_ID}`;
     render(
       <PublicApplyAccountPrompt
         gateKey={PROPERTY_ID}
@@ -71,7 +71,7 @@ describe("PublicApplyAccountPrompt renders three ordered actions", () => {
     // Create account is the recommended path and carries the listing context.
     const createHref = create.closest("a")?.getAttribute("href") ?? "";
     expect(createHref).toContain("/auth/create-account");
-    expect(createHref).toContain(encodeURIComponent(`/rent/apply?propertyId=${PROPERTY_ID}`));
+    expect(createHref).toContain(encodeURIComponent(`/resident/applications/apply?propertyId=${PROPERTY_ID}`));
 
     // Sign in stays a real link for returning residents.
     expect(signIn.closest("a")?.getAttribute("href")).toContain("/auth/sign-in");

@@ -2,13 +2,16 @@
 /**
  * Restore 5259 Brooklyn Ave NE (if missing) and set per-room move-in instructions.
  *
+ * Dev/test only — refuses the production Supabase project unless
+ * ALLOW_PRODUCTION_LISTING_WRITE=1 (captain-approved).
+ *
  * Usage:
  *   node --env-file=.env.local scripts/restore-brooklyn-move-in.mjs
- *   node --env-file=.env.production.local scripts/restore-brooklyn-move-in.mjs
  */
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { refuseProductionListingWrites } from "./lib/refuse-production-listing-writes.mjs";
 import {
   BROOKLYN_PROPERTY_ID,
   applyBrooklynMoveInInstructions,
@@ -22,6 +25,7 @@ if (!url || !key) {
   console.error("Missing NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
   process.exit(1);
 }
+refuseProductionListingWrites(url, "restore-brooklyn-move-in.mjs");
 
 function loadRestorePropertyData() {
   const sql = fs.readFileSync(

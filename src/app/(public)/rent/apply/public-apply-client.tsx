@@ -116,6 +116,7 @@ export function PublicApplyClient({ signedInNonResident = false }: { signedInNon
     gateKey: applyGateKey,
     guestContinue,
     signedInNonResident,
+    hasResidentRole: false,
   });
 
   if (portfolioPropertyIds.length > 0 && !propertyId) {

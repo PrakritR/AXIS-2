@@ -16,17 +16,40 @@ export function publicApplyGateKey(input: {
   return "";
 }
 
+/** In-portal apply URL — canonical return target after sign-in / create-account. */
+export function residentPortalApplyReturnPath(input: {
+  propertyId?: string;
+  rentalType?: "standard" | "short_term";
+  listingRoomId?: string;
+  bundleId?: string;
+}): string {
+  const pid = input.propertyId?.trim();
+  if (!pid) return "/resident/applications/apply";
+  const q = new URLSearchParams({ propertyId: pid });
+  if (input.rentalType === "short_term") q.set("rentalType", "short_term");
+  const roomId = input.listingRoomId?.trim();
+  if (roomId) q.set("listingRoomId", roomId);
+  const bundleId = input.bundleId?.trim();
+  if (bundleId) q.set("bundle", bundleId);
+  return `/resident/applications/apply?${q.toString()}`;
+}
+
 /** Return path after sign-in / create-account for a single listing or portfolio picker. */
 export function publicApplyReturnPath(input: {
   propertyId?: string;
   portfolioPropertyIds?: readonly string[];
   rentalType?: "standard" | "short_term";
+  listingRoomId?: string;
+  bundleId?: string;
 }): string {
   const pid = input.propertyId?.trim();
   if (pid) {
-    const q = new URLSearchParams({ propertyId: pid });
-    if (input.rentalType === "short_term") q.set("rentalType", "short_term");
-    return `/rent/apply?${q.toString()}`;
+    return residentPortalApplyReturnPath({
+      propertyId: pid,
+      rentalType: input.rentalType,
+      listingRoomId: input.listingRoomId,
+      bundleId: input.bundleId,
+    });
   }
   const ids = [
     ...new Set((input.portfolioPropertyIds ?? []).map((id) => id.trim()).filter(Boolean)),
@@ -36,7 +59,7 @@ export function publicApplyReturnPath(input: {
       rentalType: input.rentalType === "short_term" ? "short_term" : undefined,
     });
   }
-  return "/rent/apply";
+  return "/resident/applications/apply";
 }
 
 /** Remember that the applicant chose to apply without signing in (per gate key). */
@@ -100,9 +123,12 @@ export function resolvePublicApplyView(input: {
   gateKey?: string;
   guestContinue: boolean;
   signedInNonResident: boolean;
+  /** When true, the caller already holds the resident role — skip the account gate. */
+  hasResidentRole?: boolean;
 }): PublicApplyView {
   const key = input.gateKey?.trim() || input.propertyId?.trim() || "";
   const gateInPlay = Boolean(key) && !input.guestContinue;
   if (!gateInPlay) return "wizard";
+  if (input.hasResidentRole) return "wizard";
   return input.signedInNonResident ? "signed-in-create-resident" : "account-prompt";
 }

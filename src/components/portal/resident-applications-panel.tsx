@@ -7,6 +7,8 @@ import { Modal } from "@/components/ui/modal";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { CosignerInviteCallout } from "@/components/marketing/cosigner-invite-callout";
 import { GroupShareCallout } from "@/components/marketing/rental-application-finish-panel";
+import { PublicApplyAccountPrompt } from "@/components/marketing/public-apply-account-prompt";
+import { SignedInResidentAccountPrompt } from "@/components/marketing/signed-in-resident-account-prompt";
 import { RentalApplicationWizard } from "@/components/marketing/rental-application-wizard";
 import {
   ManagerPortalPageShell,
@@ -64,6 +66,13 @@ import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
 import { filterSandboxFromPublicCatalog } from "@/lib/public-sandbox-listings";
 import { isProductionPublicSite } from "@/lib/public-demo-access";
 import { getPropertyById } from "@/lib/rental-application/data";
+import {
+  hasPublicApplyGuestContinue,
+  markPublicApplyGuestContinue,
+  publicApplyGateKey,
+  publicApplyReturnPath,
+  resolvePublicApplyView,
+} from "@/lib/rental-application/public-apply-session";
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import { usePortalSession } from "@/hooks/use-portal-session";
 import {
@@ -234,12 +243,18 @@ export function ResidentApplicationsPanel({
   bucket: bucketProp = "pending",
   applicationId: applicationIdProp,
   basePath = RESIDENT_PORTAL_BASE_PATH,
+  signedInNonResident = false,
+  hasResidentRole = true,
 }: {
   embedded?: boolean;
   applyMode?: boolean;
   bucket?: ManagerApplicationBucket;
   applicationId?: string;
   basePath?: string;
+  /** Signed-in manager/vendor on the apply gate — server-resolved. */
+  signedInNonResident?: boolean;
+  /** Caller holds the resident role — skip the account gate. */
+  hasResidentRole?: boolean;
 } = {}) {
   const pathname = usePathname();
   const router = useRouter();
@@ -397,6 +412,66 @@ export function ResidentApplicationsPanel({
     [rows, wizardRowId],
   );
   const activeInProgressRow = lockedInProgressRow ?? inProgressRow;
+
+  const rentalTypeParam = searchParams.get("rentalType")?.trim();
+  const rentalType = rentalTypeParam === "short_term" ? ("short_term" as const) : undefined;
+
+  const applyGateKey = useMemo(
+    () =>
+      applyTarget
+        ? publicApplyGateKey({
+            propertyId: applyTarget.propertyId,
+          })
+        : "",
+    [applyTarget],
+  );
+
+  const applyReturnPath = useMemo(
+    () =>
+      applyTarget
+        ? publicApplyReturnPath({
+            propertyId: applyTarget.propertyId,
+            rentalType,
+            listingRoomId: applyTarget.listingRoomId,
+            bundleId: applyTarget.bundleId,
+          })
+        : "",
+    [applyTarget, rentalType],
+  );
+
+  const [guestBypass, setGuestBypass] = useState(false);
+  const [guestContinuedInSession, setGuestContinuedInSession] = useState(false);
+
+  useEffect(() => {
+    if (!applyGateKey) {
+      setGuestContinuedInSession(false);
+      return;
+    }
+    setGuestContinuedInSession(hasPublicApplyGuestContinue(applyGateKey));
+  }, [applyGateKey]);
+
+  const continueApplyAsGuest = useCallback(() => {
+    if (applyGateKey) markPublicApplyGuestContinue(applyGateKey);
+    setGuestBypass(true);
+  }, [applyGateKey]);
+
+  const guestContinue = !applyGateKey || guestBypass || guestContinuedInSession;
+
+  const applyView = useMemo(
+    () =>
+      resolvePublicApplyView({
+        gateKey: applyGateKey,
+        guestContinue,
+        signedInNonResident,
+        hasResidentRole,
+      }),
+    [applyGateKey, guestContinue, signedInNonResident, hasResidentRole],
+  );
+
+  const applyPropertyTitle = useMemo(() => {
+    if (!applyTarget?.propertyId) return undefined;
+    return getPropertyById(applyTarget.propertyId)?.title?.trim();
+  }, [applyTarget, tick]);
 
   const counts = useMemo(() => countByBucket(rows), [rows]);
   const tabs = useMemo(
@@ -829,6 +904,34 @@ export function ResidentApplicationsPanel({
     />
   );
 
+  const renderStandaloneApplySurface = () => {
+    if (!applyMode || activeInProgressRow || !applyTarget) return null;
+
+    if (applyView !== "wizard") {
+      return (
+        <div className="mx-auto w-full max-w-3xl py-4 sm:py-8">
+          {applyView === "signed-in-create-resident" ? (
+            <SignedInResidentAccountPrompt
+              gateKey={applyGateKey}
+              applyReturnPath={applyReturnPath}
+              propertyTitle={applyPropertyTitle}
+              onContinueGuest={continueApplyAsGuest}
+            />
+          ) : (
+            <PublicApplyAccountPrompt
+              gateKey={applyGateKey}
+              applyReturnPath={applyReturnPath}
+              propertyTitle={applyPropertyTitle}
+              onContinueGuest={continueApplyAsGuest}
+            />
+          )}
+        </div>
+      );
+    }
+
+    return <div className={PORTAL_DATA_TABLE_WRAP}>{embeddedWizard}</div>;
+  };
+
   const renderDetailActions = (row: DemoApplicantRow) => (
     <PortalSectionActionRow variant="header">
       {isInProgressApplicationRow(row) && !applicationIdProp ? (
@@ -1096,9 +1199,7 @@ export function ResidentApplicationsPanel({
     <>
       {embedded ? filterRow : null}
 
-      {applyMode && !activeInProgressRow ? (
-        <div className={PORTAL_DATA_TABLE_WRAP}>{embeddedWizard}</div>
-      ) : null}
+      {renderStandaloneApplySurface()}
 
       {rows.length === 0 && !applyMode ? (
         <PortalDataTableEmpty icon="application" message="No applications yet. Start your first application." />
@@ -1260,9 +1361,7 @@ export function ResidentApplicationsPanel({
           </div>
         ) : (
           <>
-            {applyMode && !activeInProgressRow ? (
-              <div className={PORTAL_DATA_TABLE_WRAP}>{embeddedWizard}</div>
-            ) : null}
+            {renderStandaloneApplySurface()}
             {rowsForBucket.length > 0 ? renderApplicationsTable() : null}
           </>
         )}

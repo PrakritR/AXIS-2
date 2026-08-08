@@ -333,12 +333,15 @@ export async function notifyTenantTourRequestReceived(
 
   const guestPhone = textField(inquiry as Record<string, unknown>, "phone") || null;
   const listingLink = propertyId ? `${origin}/rent/listings/${propertyId}` : origin;
+  const accountPrompt = ctx.createAccountUrl?.trim()
+    ? ` Create your free account to track it: ${ctx.createAccountUrl.trim()}`
+    : "";
   await textTourGuest({
     guestPhone,
     smsConsent: inquirySmsConsent(inquiry),
     text: `PropLane: we received your tour request for ${ctx.propertyTitle}${
       ctx.tourStartIso ? ` (${formatTourTimeRange(ctx.tourStartIso, ctx.tourEndIso)})` : ""
-    }. We'll text you here once it's confirmed. Details: ${listingLink}. Reply STOP to opt out, HELP for help.`,
+    }. We'll text you here once it's confirmed.${accountPrompt} Details: ${listingLink}. Reply STOP to opt out, HELP for help.`,
   });
 
   if (email.error) return { ok: true, skipped: true, error: email.error };

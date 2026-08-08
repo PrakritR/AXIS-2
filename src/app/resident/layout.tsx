@@ -1,3 +1,4 @@
+import { headers } from "next/headers";
 import { Suspense } from "react";
 import { AxisAssistant } from "@/components/portal/axis-assistant";
 import { PortalAssistantDockRail } from "@/components/portal/portal-assistant-dock-rail";
@@ -26,8 +27,15 @@ import { getResidentPortalDefinition } from "@/lib/portals/resident";
 import { getAssistantDockCollapsed } from "@/lib/assistant-dock-state";
 import { getSidebarCollapsed } from "@/lib/portal-sidebar-state";
 
+function isResidentApplicationsApplyPath(pathname: string): boolean {
+  return pathname === "/resident/applications/apply";
+}
+
 export default async function ResidentLayout({ children }: { children: React.ReactNode }) {
-  await assertPortalLayoutRole("resident", "resident");
+  const pathname = (await headers()).get("x-pathname") ?? "";
+  await assertPortalLayoutRole("resident", "resident", {
+    allowSignedInApplyGate: isResidentApplicationsApplyPath(pathname),
+  });
 
   const residentPortal = await getResidentPortalDefinition();
   const { profile, user } = await getEffectiveSessionForPortal("resident");

@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import Link from "next/link";
-import type { Session } from "@supabase/supabase-js";
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import type { MockProperty } from "@/data/types";
 import { PROPERTY_PIPELINE_EVENT } from "@/lib/property-pipeline-events";
@@ -22,7 +21,8 @@ import {
   ProspectPublicSuccessBanner,
   PUBLIC_PROSPECT_CANVAS_CLASS,
 } from "@/components/marketing/prospect-public-handoff";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useProspectContactAutofill, type ProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
+import { promoteToResidentPortal } from "@/lib/prospect-portal-handoff.client";
 import { residentCreateAccountHref, residentSignInHref } from "@/lib/resident-public-nav";
 import { buildRentalApplyHref } from "@/lib/rental-application/apply-from-listing";
 import {
@@ -179,7 +179,8 @@ export function TourScheduleFlow({
     phone: string;
     inquiryId: string;
   } | null>(null);
-  const [signedInUserId, setSignedInUserId] = useState<string | null>(null);
+  const contactAutofill = useProspectContactAutofill();
+  const signedInUserId = contactAutofill.userId;
   const [tick, setTick] = useState(0);
   const [selectedRoomKey, setSelectedRoomKey] = useState<string | null>(null);
   const selectedRoomLabel = useMemo(
@@ -199,18 +200,6 @@ export function TourScheduleFlow({
   const [availabilityError, setAvailabilityError] = useState<string | null>(null);
   const [bookingTour, setBookingTour] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-
-  useEffect(() => {
-    let cancelled = false;
-    const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-      if (cancelled) return;
-      setSignedInUserId(result.data.session?.user?.id ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   useEffect(() => {
     const sync = () => setTick((n) => n + 1);
@@ -470,6 +459,7 @@ export function TourScheduleFlow({
           <Step3
             property={property}
             roomLabel={selectedRoomLabel}
+            contactDefaults={contactAutofill}
             day={selectedDay}
             slotIndex={selectedSlotIndex}
             month={calMonth}
@@ -560,11 +550,12 @@ export function TourScheduleFlow({
               const inquiryIds = results
                 .map((item) => item.row?.id?.trim() ?? "")
                 .filter(Boolean);
-              if (signedInUserId && inquiryIds.length > 0) {
-                const linked = await linkBookedToursToSignedInResident(inquiryIds);
-                if (!linked) {
-                  showToast("Your tour was booked, but it could not be added to Tours yet. Refresh the portal to retry.");
+              if (signedInUserId) {
+                if (inquiryIds.length > 0) {
+                  await linkBookedToursToSignedInResident(inquiryIds);
                 }
+                const promoted = await promoteToResidentPortal("/resident/tour/pending");
+                if (promoted) return;
               }
               setSubmitted(true);
               const firstInquiryId = inquiryIds[0] ?? "";
@@ -840,7 +831,7 @@ function Step2({
 
 function Step3({
   property, roomLabel, day, slotIndex, month, year, submitting, onSubmit, fieldErrors, onFieldChange,
-  returnAfterAuth,
+  returnAfterAuth, contactDefaults,
 }: {
   property: MockProperty; roomLabel: string; day: number | null; slotIndex: number | null;
   month: number;
@@ -848,6 +839,7 @@ function Step3({
   submitting: boolean;
   fieldErrors: Record<string, string>;
   returnAfterAuth: string;
+  contactDefaults: ProspectContactAutofill;
   onFieldChange: (key: string) => void;
   onSubmit: (payload: { name: string; email: string; phone: string; notes: string; smsConsent: boolean }) => void | Promise<void>;
 }) {
@@ -859,22 +851,11 @@ function Step3({
   const signInHref = residentSignInHref(returnAfterAuth);
 
   useEffect(() => {
-    let cancelled = false;
-    const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-      const { session } = result.data;
-      if (cancelled || !session?.user) return;
-      const user = session.user;
-      const meta = user.user_metadata as { full_name?: string; name?: string } | undefined;
-      const profileName = meta?.full_name?.trim() || meta?.name?.trim() || "";
-      const profileEmail = user.email?.trim() || "";
-      if (profileName) setName((prev) => prev || profileName);
-      if (profileEmail) setEmail((prev) => prev || profileEmail);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!contactDefaults.ready) return;
+    if (contactDefaults.name) setName((prev) => prev || contactDefaults.name);
+    if (contactDefaults.email) setEmail((prev) => prev || contactDefaults.email);
+    if (contactDefaults.phone) setPhone((prev) => prev || contactDefaults.phone);
+  }, [contactDefaults.ready, contactDefaults.name, contactDefaults.email, contactDefaults.phone]);
 
   return (
     <div className="space-y-5">

@@ -10,8 +10,8 @@ import { ManagerLinkGate } from "@/components/marketing/manager-link-gate";
 import { SmsConsentCheckbox } from "@/components/marketing/sms-consent-checkbox";
 import Link from "next/link";
 import { SegmentedTwo } from "@/components/ui/segmented-control";
-import type { Session } from "@supabase/supabase-js";
-import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { useProspectContactAutofill } from "@/hooks/use-prospect-contact-autofill";
+import { promoteToResidentPortal } from "@/lib/prospect-portal-handoff.client";
 import {
   residentCreateAccountHref,
   residentSignInHref,
@@ -237,7 +237,8 @@ function MessageFlow({
     phone: string;
     topic: string;
   } | null>(null);
-  const [signedInUserId, setSignedInUserId] = useState<string | null>(null);
+  const contactAutofill = useProspectContactAutofill();
+  const signedInUserId = contactAutofill.userId;
   const [topic, setTopic] = useState("");
   const [otherTopicDetail, setOtherTopicDetail] = useState("");
   const [name, setName] = useState("");
@@ -249,16 +250,11 @@ function MessageFlow({
   const isOther = topic === "Other";
 
   useEffect(() => {
-    let cancelled = false;
-    const supabase = createSupabaseBrowserClient();
-    void supabase.auth.getSession().then((result: { data: { session: Session | null } }) => {
-      if (cancelled) return;
-      setSignedInUserId(result.data.session?.user?.id ?? null);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+    if (!contactAutofill.ready) return;
+    if (contactAutofill.name) setName((prev) => prev || contactAutofill.name);
+    if (contactAutofill.email) setEmail((prev) => prev || contactAutofill.email);
+    if (contactAutofill.phone) setPhone((prev) => prev || contactAutofill.phone);
+  }, [contactAutofill.ready, contactAutofill.name, contactAutofill.email, contactAutofill.phone]);
 
   const handleSend = async () => {
     if (!topic) {
@@ -302,6 +298,10 @@ function MessageFlow({
       if (!res.ok) {
         showToast(data.error ?? "Could not send message.");
         return;
+      }
+      if (signedInUserId) {
+        const promoted = await promoteToResidentPortal("/resident/communication/active");
+        if (promoted) return;
       }
       setSubmittedContact({
         name: n,

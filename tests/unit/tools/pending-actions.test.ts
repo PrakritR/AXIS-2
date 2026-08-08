@@ -134,19 +134,14 @@ describe("pending actions", () => {
     expect(rows[0]!.tool_name).toBe("do_thing");
   });
 
-  it("returns null AND logs when the insert fails, so the failure is diagnosable", async () => {
-    // Regression: production once lacked the `portal` column, so this insert
-    // failed with a PostgREST unknown-column error that was silently swallowed —
-    // the user saw only "could not show the confirmation card" and no server log
-    // explained why. The null must still surface (callers show the fallback), but
-    // the reason must be logged.
+  it("returns null AND logs when every insert attempt fails", async () => {
     const failingDb = {
       from: () => ({
         insert: () => ({
           select: () => ({
             single: async () => ({
               data: null,
-              error: { message: "Could not find the 'portal' column of 'agent_pending_actions'", code: "PGRST204" },
+              error: { message: "new row violates row-level security policy", code: "42501" },
             }),
           }),
         }),
@@ -160,10 +155,117 @@ describe("pending actions", () => {
       expect(spy).toHaveBeenCalledTimes(1);
       const [msg, detail] = spy.mock.calls[0]!;
       expect(String(msg)).toContain("pending action insert failed");
-      expect(detail).toMatchObject({ tool: "do_thing", code: "PGRST204" });
+      expect(detail).toMatchObject({ tool: "do_thing", code: "42501" });
     } finally {
       spy.mockRestore();
     }
+  });
+
+  it("retries without proposal_trace_id when that column is missing", async () => {
+    let attempts = 0;
+    const db = {
+      from: () => ({
+        insert: (values: Record<string, unknown>) => ({
+          select: () => ({
+            single: async () => {
+              attempts += 1;
+              if ("proposal_trace_id" in values) {
+                return {
+                  data: null,
+                  error: { message: "Could not find the 'proposal_trace_id' column", code: "PGRST204" },
+                };
+              }
+              return { data: { id: "pa_retry_ok" }, error: null };
+            },
+          }),
+        }),
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      const id = await createPendingActionForUser(db, {
+        landlordId: "landlord",
+        userId: "user_a",
+        toolName: "copy_listing_photos",
+        input: { sourcePropertyId: "a", targetPropertyId: "b" },
+        preview: { kind: "copy_listing_photos", title: "Copy", confirmLabel: "Copy", fields: [] },
+        proposalTraceId: "trace-1",
+      });
+      expect(id).toBe("pa_retry_ok");
+      expect(attempts).toBe(2);
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("retries without session_id when the session FK is invalid", async () => {
+    let attempts = 0;
+    const db = {
+      from: () => ({
+        insert: (values: Record<string, unknown>) => ({
+          select: () => ({
+            single: async () => {
+              attempts += 1;
+              if ("session_id" in values) {
+                return {
+                  data: null,
+                  error: {
+                    message: 'insert or update on table "agent_pending_actions" violates foreign key constraint',
+                    code: "23503",
+                  },
+                };
+              }
+              return { data: { id: "pa_no_session" }, error: null };
+            },
+          }),
+        }),
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const id = await createPendingActionForUser(db, {
+      landlordId: "landlord",
+      userId: "user_a",
+      toolName: "copy_listing_photos",
+      input: { sourcePropertyId: "a", targetPropertyId: "b" },
+      preview: { kind: "copy_listing_photos", title: "Copy", confirmLabel: "Copy", fields: [] },
+      sessionId: "33333333-3333-4333-8333-333333333333",
+    });
+    expect(id).toBe("pa_no_session");
+    expect(attempts).toBeGreaterThanOrEqual(2);
+  });
+
+  it("retries without portal when that column is missing on older production schemas", async () => {
+    let attempts = 0;
+    const db = {
+      from: () => ({
+        insert: (values: Record<string, unknown>) => ({
+          select: () => ({
+            single: async () => {
+              attempts += 1;
+              if ("portal" in values) {
+                return {
+                  data: null,
+                  error: { message: "Could not find the 'portal' column of 'agent_pending_actions'", code: "PGRST204" },
+                };
+              }
+              return { data: { id: "pa_legacy_ok" }, error: null };
+            },
+          }),
+        }),
+      }),
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    } as any;
+    const id = await createPendingActionForUser(db, {
+      landlordId: "landlord",
+      userId: "user_a",
+      toolName: "copy_listing_photos",
+      input: { sourcePropertyId: "a", targetPropertyId: "b" },
+      preview: { kind: "copy_listing_photos", title: "Copy", confirmLabel: "Copy", fields: [] },
+    });
+    expect(id).toBe("pa_legacy_ok");
+    expect(attempts).toBe(4);
   });
 
   it("keeps every open proposal — a newer one never supersedes an older one", async () => {

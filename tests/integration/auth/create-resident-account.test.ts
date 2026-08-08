@@ -13,11 +13,24 @@ vi.mock("@/lib/auth/profile-role-row", () => ({
 vi.mock("@/lib/analytics/posthog", () => ({
   track: vi.fn(),
 }));
+vi.mock("@/lib/tour-resident-link.server", () => ({
+  linkAllTourInquiriesForEmail: vi.fn().mockResolvedValue(undefined),
+  attachInboxThreadsToResident: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import { ensureProfileRoleRow } from "@/lib/auth/profile-role-row";
+import { linkAllTourInquiriesForEmail, attachInboxThreadsToResident } from "@/lib/tour-resident-link.server";
 import { POST as createResidentAccount } from "@/app/api/auth/create-resident-account/route";
+
+function postRequest(body?: Record<string, unknown>) {
+  return new Request("http://localhost/api/auth/create-resident-account", {
+    method: "POST",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
 
 /** Fake `profiles` + `profile_roles` query surface that records update/insert calls. */
 function fakeService(existingProfile: { role?: string } | null, existingRoleRows: { role: string }[] = []) {
@@ -52,7 +65,7 @@ describe("POST /api/auth/create-resident-account", () => {
 
   it("rejects an unauthenticated caller with 401 and grants no role", async () => {
     signedInAs(null);
-    const res = await createResidentAccount();
+    const res = await createResidentAccount(postRequest());
     expect(res.status).toBe(401);
     expect(ensureProfileRoleRow).not.toHaveBeenCalled();
   });
@@ -62,7 +75,7 @@ describe("POST /api/auth/create-resident-account", () => {
     const { service, update, insert } = fakeService({ role: "manager" });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
 
-    const res = await createResidentAccount();
+    const res = await createResidentAccount(postRequest());
     const { status, data } = await parseJsonResponse<{ ok: boolean; redirectTo: string }>(res);
 
     expect(status).toBe(200);
@@ -70,6 +83,11 @@ describe("POST /api/auth/create-resident-account", () => {
     expect(data.redirectTo).toBe("/resident/applications/apply");
     // Resident role ADDED…
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "mgr-1", "resident");
+    expect(linkAllTourInquiriesForEmail).toHaveBeenCalledWith(service, {
+      userId: "mgr-1",
+      email: "multi@axis.test",
+    });
+    expect(attachInboxThreadsToResident).toHaveBeenCalledWith(service, "mgr-1", "multi@axis.test");
     // …and the manager's profile is untouched: role unchanged, so no update, no insert.
     expect(update).not.toHaveBeenCalled();
     expect(insert).not.toHaveBeenCalled();
@@ -82,7 +100,7 @@ describe("POST /api/auth/create-resident-account", () => {
     const { service, insert } = fakeService(null);
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
 
-    const res = await createResidentAccount();
+    const res = await createResidentAccount(postRequest());
     expect(res.status).toBe(200);
     expect(insert).toHaveBeenCalledWith({ id: "new-1", email: "new@axis.test", role: "resident" });
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "new-1", "resident");
@@ -97,7 +115,7 @@ describe("POST /api/auth/create-resident-account", () => {
     const { service } = fakeService({ role: "manager" }, []);
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
 
-    const res = await createResidentAccount();
+    const res = await createResidentAccount(postRequest());
     expect(res.status).toBe(200);
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-mgr-1", "manager");
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-mgr-1", "resident");
@@ -110,7 +128,7 @@ describe("POST /api/auth/create-resident-account", () => {
     const { service } = fakeService({ role: "owner" }, []);
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
 
-    const res = await createResidentAccount();
+    const res = await createResidentAccount(postRequest());
     expect(res.status).toBe(200);
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-owner-1", "manager");
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "legacy-owner-1", "resident");
@@ -123,9 +141,19 @@ describe("POST /api/auth/create-resident-account", () => {
     const { service, update } = fakeService({ role: "manager" });
     vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
 
-    const res = await createResidentAccount();
+    const res = await createResidentAccount(postRequest());
     expect(res.status).toBe(200);
     expect(update).not.toHaveBeenCalled();
     expect(ensureProfileRoleRow).toHaveBeenCalledWith(service, "mgr-1", "resident");
+  });
+
+  it("honors a safe resident redirect path in the request body", async () => {
+    signedInAs("mgr-1");
+    const { service } = fakeService({ role: "manager" });
+    vi.mocked(createSupabaseServiceRoleClient).mockReturnValue(service as never);
+
+    const res = await createResidentAccount(postRequest({ redirectTo: "/resident/communication/active" }));
+    const { data } = await parseJsonResponse<{ redirectTo: string }>(res);
+    expect(data.redirectTo).toBe("/resident/communication/active");
   });
 });
