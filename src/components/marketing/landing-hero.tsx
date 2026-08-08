@@ -23,13 +23,20 @@ export function LandingHero() {
             PropLane uses AI to handle applications, screening, leases, and rent collection in one platform, so you spend less time managing and more time growing your portfolio.
           </p>
 
-          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:mt-12 sm:flex-row">
+          <div className="mt-10 flex flex-col items-center justify-center gap-4 sm:mt-12 sm:flex-row sm:flex-wrap">
             <Link
               href="/partner"
               data-attr="home-hero-partner"
               className="btn-metallic hero-cta-metallic inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full px-8 py-3 text-sm font-semibold transition-[transform,box-shadow,filter] duration-200 ease-out hover:-translate-y-0.5 hover:brightness-105 active:translate-y-px active:scale-[0.99] sm:w-auto"
             >
               Use software
+            </Link>
+            <Link
+              href="/app"
+              data-attr="home-hero-use-app"
+              className="native-hide hero-cta-outline inline-flex min-h-[44px] w-full cursor-pointer items-center justify-center rounded-full border px-8 py-3 text-sm font-semibold transition-colors duration-200 active:scale-[0.99] sm:w-auto"
+            >
+              Use app
             </Link>
             <Link
               href="/contact"
@@ -39,13 +46,6 @@ export function LandingHero() {
               Contact us
             </Link>
           </div>
-          <p className="native-hide mt-5 text-sm text-muted">
-            <Link href="/app" className="font-semibold text-primary hover:underline" data-attr="home-hero-mobile-app">
-              Mobile app
-            </Link>
-            {" · "}
-            Push notifications and inbox on the go.
-          </p>
         </RevealOnView>
       </div>
     </section>
