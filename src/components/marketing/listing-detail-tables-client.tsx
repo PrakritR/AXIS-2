@@ -649,19 +649,19 @@ export function ListingDetailModal({
                           ),
                       },
                       {
-                        label: "Your bathroom",
-                        value: (
-                          <div className="space-y-1">
-                            <p className="font-semibold text-foreground">
-                              {state.room.modal.bathroomShortLabel ?? "—"}
-                            </p>
-                            {state.room.modal.bathroomDetailLine ? (
-                              <p className="text-xs font-normal leading-snug text-muted">
-                                {state.room.modal.bathroomDetailLine}
-                              </p>
-                            ) : null}
-                          </div>
-                        ),
+                        label: "Bathrooms",
+                        value:
+                          (state.room.modal.bathroomAccessLines?.length ?? 0) > 0 ? (
+                            <ul className="space-y-1">
+                              {state.room.modal.bathroomAccessLines!.map((line) => (
+                                <li key={line} className="font-semibold text-foreground">
+                                  {line}
+                                </li>
+                              ))}
+                            </ul>
+                          ) : (
+                            "—"
+                          ),
                       },
                       {
                         label: "Status",

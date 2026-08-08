@@ -150,6 +150,8 @@ function availabilityLabel(room: ListingRoomRow): string {
 }
 
 function bathroomHintFromRoom(room: ListingRoomRow): string {
+  const accessLines = room.modal.bathroomAccessLines?.filter((line) => line.trim());
+  if (accessLines?.length) return accessLines.join(" · ");
   const label = room.modal.bathroomShortLabel?.trim();
   const detail = room.modal.bathroomDetailLine?.trim();
   if (label && detail) return `${label} · ${detail}`;

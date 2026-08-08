@@ -279,6 +279,71 @@ export function listingHasWholeHouseBath(sub: ManagerListingSubmissionV1): boole
   return wholeHouseBaths(sub).length > 0;
 }
 
+export type RoomBathroomAccessLine = {
+  label: string;
+  privacy: "private" | "shared";
+  shareRoomCount?: number;
+};
+
+function bathroomsAccessibleToRoom(
+  roomId: string,
+  sub: ManagerListingSubmissionV1,
+): ManagerBathroomSubmission[] {
+  return effectiveBathroomsForListing(sub).filter((b) => {
+    if (!b.name.trim()) return false;
+    if (b.allResidents) return true;
+    return (b.assignedRoomIds ?? []).includes(roomId);
+  });
+}
+
+function bathroomPrivacyForRoom(
+  bath: ManagerBathroomSubmission,
+  roomId: string,
+  sub: ManagerListingSubmissionV1,
+): Pick<RoomBathroomAccessLine, "privacy" | "shareRoomCount"> {
+  if (bath.allResidents) {
+    const count = listingRooms(sub).length;
+    return { privacy: "shared", shareRoomCount: count > 0 ? count : undefined };
+  }
+
+  const ids = (bath.assignedRoomIds ?? []).filter(Boolean);
+  const kind = accessKindForRoom(bath, roomId);
+  if (kind === "ensuite" || ids.length === 1) {
+    return { privacy: "private" };
+  }
+
+  return { privacy: "shared", shareRoomCount: ids.length > 0 ? ids.length : undefined };
+}
+
+export function formatRoomBathroomAccessLine(line: RoomBathroomAccessLine): string {
+  if (line.privacy === "private") {
+    return `${line.label} (private)`;
+  }
+  const n = line.shareRoomCount;
+  if (typeof n === "number" && n > 1) {
+    return `${line.label} (shared · ${n} rooms)`;
+  }
+  return `${line.label} (shared)`;
+}
+
+/** Every bathroom this room can use — numbered for listing modals. */
+export function roomBathroomAccessLines(
+  roomId: string,
+  sub: ManagerListingSubmissionV1,
+): RoomBathroomAccessLine[] {
+  return bathroomsAccessibleToRoom(roomId, sub).map((bath, index) => ({
+    label: `Bathroom ${index + 1}`,
+    ...bathroomPrivacyForRoom(bath, roomId, sub),
+  }));
+}
+
+export function roomBathroomAccessDisplayLines(
+  roomId: string,
+  sub: ManagerListingSubmissionV1,
+): string[] {
+  return roomBathroomAccessLines(roomId, sub).map(formatRoomBathroomAccessLine);
+}
+
 function splitBathroomModalCopy(full: string): { label: string; detail: string } {
   const parts = full
     .split(" · ")

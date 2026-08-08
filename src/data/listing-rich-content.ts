@@ -25,6 +25,8 @@ export type ListingRoomModal = {
   bathroomShortLabel?: string;
   /** Secondary bathroom detail under the stat-card label (shared-with names, etc.). */
   bathroomDetailLine?: string;
+  /** Numbered access lines, e.g. "Bathroom 1 (shared · 2 rooms)". */
+  bathroomAccessLines?: string[];
 };
 
 export type ListingRoomRow = {

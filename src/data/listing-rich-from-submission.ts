@@ -20,6 +20,7 @@ import {
   bathroomAssignedRoomNames,
   describeRoomBathroomSituation,
   listingHasWholeHouseBath,
+  roomBathroomAccessDisplayLines,
   roomBathroomModalLabel,
   roomBathroomSetupLine,
   roomHasPrivateBath,
@@ -268,6 +269,7 @@ function buildListingFloorCard(
     const setup = describeRoomBathroomSituation(r.id, sub);
     const bathroomShort = roomBathroomModalLabel(r, sub);
     const bathroomDetail = roomBathroomSetupLine(r, sub);
+    const bathroomAccessLines = roomBathroomAccessDisplayLines(r.id, sub);
     const furnish = formatFurnishingForListing(r.furnishing);
     const amenityLabels = splitRoomAmenityLines(r.roomAmenitiesText ?? "");
     const utilRaw = formatUtilitiesListingLine(
@@ -295,6 +297,7 @@ function buildListingFloorCard(
         setupLine: setup,
         bathroomShortLabel: bathroomShort,
         bathroomDetailLine: bathroomDetail || undefined,
+        bathroomAccessLines: bathroomAccessLines.length > 0 ? bathroomAccessLines : undefined,
         tourEyebrow: "Room tour",
         tourTitle: r.videoDataUrl ? "Uploaded video" : "Video tour",
         tourSubtitle: r.videoDataUrl

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createDefaultListingSubmission } from "@/lib/manager-listing-submission";
 import {
   describeRoomBathroomSituation,
+  roomBathroomAccessDisplayLines,
   roomBathroomModalLabel,
   roomBathroomSetupLine,
 } from "@/lib/listing-bathroom-layout";
@@ -59,5 +60,44 @@ describe("listing bathroom layout copy", () => {
     expect(roomBathroomModalLabel(room, sub)).toBe("Hall bath");
     expect(roomBathroomSetupLine(room, sub)).toContain("Room B");
     expect(describeRoomBathroomSituation(room.id, sub)).toContain("shared with Room B");
+  });
+
+  it("lists every bathroom a room can use with private/shared labels", () => {
+    const sub = createDefaultListingSubmission();
+    sub.rooms = [
+      { ...sub.rooms[0]!, id: "r1", name: "Room A" },
+      { ...sub.rooms[0]!, id: "r2", name: "Room B" },
+    ];
+    sub.bathrooms = [
+      {
+        id: "b1",
+        name: "Suite bath",
+        location: "",
+        amenitiesText: "",
+        photoDataUrls: [],
+        shower: true,
+        toilet: true,
+        bathtub: false,
+        assignedRoomIds: ["r1"],
+        accessKindByRoomId: { r1: "ensuite" },
+      },
+      {
+        id: "b2",
+        name: "Hall bath",
+        location: "",
+        amenitiesText: "",
+        photoDataUrls: [],
+        shower: true,
+        toilet: true,
+        bathtub: false,
+        assignedRoomIds: ["r1", "r2"],
+        accessKindByRoomId: { r1: "shared", r2: "shared" },
+      },
+    ];
+
+    expect(roomBathroomAccessDisplayLines("r1", sub)).toEqual([
+      "Bathroom 1 (private)",
+      "Bathroom 2 (shared · 2 rooms)",
+    ]);
   });
 });
