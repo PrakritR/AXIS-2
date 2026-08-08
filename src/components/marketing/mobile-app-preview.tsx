@@ -1,6 +1,5 @@
 "use client";
 
-import type { ReactNode } from "react";
 import { Building2, ChevronDown, LayoutDashboard, MessagesSquare, Users } from "lucide-react";
 import {
   PORTAL_NATIVE_BOTTOM_NAV_CLASS,
@@ -51,6 +50,37 @@ const KPI_TONE_STYLES = {
   },
 } as const;
 
+const ATTENTION_ITEMS = [
+  {
+    dot: DOT_PENDING,
+    title: "Cascade 4B · Sat 11:00a",
+    subtitle: "Priya N. · Cascade Court",
+    pill: "Pending",
+    pillTone: "pending" as const,
+  },
+  {
+    dot: DOT_PENDING,
+    title: "Maya Chen",
+    subtitle: "Cascade Lofts · Room 4B",
+    pill: "To sign",
+    pillTone: "pending" as const,
+  },
+  {
+    dot: DOT_OVERDUE,
+    title: "Jordan Lee",
+    subtitle: "Rent · Maple 2A · due Apr 1",
+    pill: "Overdue",
+    pillTone: "danger" as const,
+  },
+  {
+    dot: DOT_PENDING,
+    title: "Leo Martins",
+    subtitle: "Ballard Commons · Room 2B",
+    pill: "Your signature",
+    pillTone: "pending" as const,
+  },
+] as const;
+
 const BOTTOM_TABS = [
   { section: "properties", label: "Properties", icon: Building2 },
   { section: "residents", label: "Residents", icon: Users },
@@ -74,10 +104,7 @@ function MoreGridIcon() {
   );
 }
 
-/**
- * Marketing phone frame — manager dashboard as rendered in the native app shell.
- * Labels and layout mirror `manager-dashboard.tsx` + native bottom-nav primary tabs.
- */
+/** Marketing phone frame — manager dashboard as rendered in the native app shell. */
 export function MobileAppPreview({ className }: { className?: string }) {
   return (
     <div
@@ -124,7 +151,7 @@ export function MobileAppPreview({ className }: { className?: string }) {
               })}
             </div>
 
-            <div className="mt-4 space-y-3">
+            <div className="mt-4">
               <div className="flex items-center gap-2">
                 <span aria-hidden className="text-lg leading-none text-primary">
                   ✦
@@ -136,56 +163,41 @@ export function MobileAppPreview({ className }: { className?: string }) {
                 </span>
               </div>
 
-              <PreviewAttentionGroup
-                title="Tour requests"
-                toneColor={DOT_PENDING}
-                toneBg="var(--status-pending-bg)"
-                count={1}
+              <div
+                className="mt-3 overflow-hidden rounded-xl border border-border bg-card"
+                style={{
+                  borderLeftWidth: 3,
+                  borderLeftColor: DOT_PENDING,
+                  background: "color-mix(in srgb, var(--status-pending-bg) 32%, var(--card))",
+                }}
               >
-                <PreviewIssueRow
-                  dot={DOT_PENDING}
-                  title="Cascade 4B · Sat 11:00a"
-                  subtitle="Priya N. · Cascade Court"
-                  pill="Pending"
-                  pillTone="pending"
-                />
-              </PreviewAttentionGroup>
-
-              <PreviewAttentionGroup
-                title="Applications to sign"
-                toneColor={DOT_PENDING}
-                toneBg="var(--status-pending-bg)"
-                count={1}
-              >
-                <PreviewIssueRow
-                  dot={DOT_PENDING}
-                  title="Maya Chen"
-                  subtitle="Cascade Lofts · Room 4B"
-                  pill="To sign"
-                  pillTone="pending"
-                />
-              </PreviewAttentionGroup>
-
-              <PreviewAttentionGroup
-                title="Pending & overdue payments"
-                toneColor={DOT_OVERDUE}
-                toneBg="var(--status-overdue-bg)"
-                count={1}
-                badge={
-                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--status-overdue-fg)]">
-                    <span aria-hidden className="size-1.5 rounded-full bg-current" />
-                    1 overdue
+                <div className="flex items-center gap-2 px-3 py-2">
+                  <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" strokeWidth={2.25} aria-hidden />
+                  <h4
+                    className="min-w-0 flex-1 text-[13px] font-semibold leading-none"
+                    style={{ color: DOT_PENDING }}
+                  >
+                    Open items
+                  </h4>
+                  <span
+                    className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
+                    style={{
+                      color: DOT_PENDING,
+                      background: "color-mix(in srgb, var(--status-pending-bg) 55%, transparent)",
+                    }}
+                  >
+                    4
                   </span>
-                }
-              >
-                <PreviewIssueRow
-                  dot={DOT_OVERDUE}
-                  title="Jordan Lee"
-                  subtitle="Rent · Maple 2A · due Apr 1"
-                  pill="Overdue"
-                  pillTone="danger"
-                />
-              </PreviewAttentionGroup>
+                  <span className="shrink-0 text-xs font-semibold" style={{ color: DOT_PENDING }}>
+                    →
+                  </span>
+                </div>
+                <div className="divide-y divide-border/80 border-t border-border">
+                  {ATTENTION_ITEMS.map((item) => (
+                    <PreviewIssueRow key={item.title} {...item} />
+                  ))}
+                </div>
+              </div>
             </div>
           </div>
 
@@ -199,23 +211,22 @@ export function MobileAppPreview({ className }: { className?: string }) {
               {BOTTOM_TABS.map(({ section, label, icon: Icon }) => {
                 const active = section === "dashboard";
                 return (
-                <div
-                  key={section}
-                  className={cn(
-                    PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS,
-                    active ? "text-primary" : "text-muted",
-                  )}
-                >
-                  {active ? (
-                    <span
-                      className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary"
-                      aria-hidden
-                    />
-                  ) : null}
-                  <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS}>
-                    <Icon className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} strokeWidth={active ? 2.25 : 2} />
-                  </span>
-                  {section !== "dashboard" ? (
+                  <div
+                    key={section}
+                    className={cn(
+                      PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS,
+                      active ? "text-primary" : "text-muted",
+                    )}
+                  >
+                    {active ? (
+                      <span
+                        className="absolute inset-x-[18%] top-0 h-0.5 rounded-full bg-primary"
+                        aria-hidden
+                      />
+                    ) : null}
+                    <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS}>
+                      <Icon className={PORTAL_NATIVE_BOTTOM_NAV_ICON_CLASS} strokeWidth={active ? 2.25 : 2} />
+                    </span>
                     <span
                       className={cn(
                         PORTAL_NATIVE_BOTTOM_NAV_LABEL_CLASS,
@@ -224,8 +235,7 @@ export function MobileAppPreview({ className }: { className?: string }) {
                     >
                       {label}
                     </span>
-                  ) : null}
-                </div>
+                  </div>
                 );
               })}
               <div className={cn(PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS, "text-muted")}>
@@ -238,51 +248,6 @@ export function MobileAppPreview({ className }: { className?: string }) {
           </nav>
         </div>
       </div>
-    </div>
-  );
-}
-
-function PreviewAttentionGroup({
-  title,
-  toneColor,
-  toneBg,
-  count,
-  badge,
-  children,
-}: {
-  title: string;
-  toneColor: string;
-  toneBg: string;
-  count: number;
-  badge?: ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      className="overflow-hidden rounded-xl border border-border bg-card"
-      style={{
-        borderLeftWidth: 3,
-        borderLeftColor: toneColor,
-        background: `color-mix(in srgb, ${toneBg} 32%, var(--card))`,
-      }}
-    >
-      <div className="flex items-center gap-2 px-3 py-2">
-        <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted" strokeWidth={2.25} aria-hidden />
-        <h4 className="min-w-0 flex-1 text-[13px] font-semibold leading-none" style={{ color: toneColor }}>
-          {title}
-        </h4>
-        <span
-          className="inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10px] font-semibold tabular-nums"
-          style={{ color: toneColor, background: `color-mix(in srgb, ${toneBg} 55%, transparent)` }}
-        >
-          {count}
-        </span>
-        {badge}
-        <span className="shrink-0 text-xs font-semibold" style={{ color: toneColor }}>
-          →
-        </span>
-      </div>
-      <div className="border-t border-border">{children}</div>
     </div>
   );
 }
