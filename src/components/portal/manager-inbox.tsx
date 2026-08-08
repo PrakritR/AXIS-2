@@ -1183,7 +1183,7 @@ export const ManagerInbox = forwardRef<
     return new Set(
       smsRecipients
         .filter((r) => r.phone?.trim() && r.residentEmail?.trim())
-        .map((r) => r.residentEmail.trim().toLowerCase()),
+        .map((r) => (r.residentEmail ?? "").trim().toLowerCase()),
     );
   }, [smsRecipients, smsUiEnabled]);
 

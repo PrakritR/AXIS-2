@@ -60,6 +60,8 @@ export function buildDemoPropertyCreationSubmission(): ManagerListingSubmissionV
         roomAmenitiesText: "",
         photoDataUrls: [],
         videoDataUrl: null,
+        moveInPhotoDataUrls: [],
+        moveInVideoDataUrl: null,
         utilitiesEstimate: "$75",
       },
       {
@@ -76,6 +78,8 @@ export function buildDemoPropertyCreationSubmission(): ManagerListingSubmissionV
         roomAmenitiesText: "",
         photoDataUrls: [],
         videoDataUrl: null,
+        moveInPhotoDataUrls: [],
+        moveInVideoDataUrl: null,
         utilitiesEstimate: "$75",
       },
     ],

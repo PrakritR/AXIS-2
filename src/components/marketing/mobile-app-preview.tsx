@@ -196,7 +196,9 @@ export function MobileAppPreview({ className }: { className?: string }) {
             )}
           >
             <div className="grid grid-cols-5">
-              {BOTTOM_TABS.map(({ section, label, icon: Icon, active }) => (
+              {BOTTOM_TABS.map(({ section, label, icon: Icon }) => {
+                const active = section === "dashboard";
+                return (
                 <div
                   key={section}
                   className={cn(
@@ -222,7 +224,8 @@ export function MobileAppPreview({ className }: { className?: string }) {
                     {label}
                   </span>
                 </div>
-              ))}
+                );
+              })}
               <div className={cn(PORTAL_NATIVE_BOTTOM_NAV_ITEM_CLASS, "text-muted")}>
                 <span className={PORTAL_NATIVE_BOTTOM_NAV_ICON_SLOT_CLASS}>
                   <MoreGridIcon />
