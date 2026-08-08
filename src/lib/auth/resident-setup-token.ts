@@ -231,7 +231,7 @@ function idVariants(id: string): string[] {
 export async function ensureResidentSetupTokenForApplication(
   db: SupabaseClient,
   axisId: string,
-  options?: { managerUserId?: string | null },
+  options?: { managerUserId?: string | null; preferredToken?: string | null },
 ): Promise<
   | { ok: true; token: string; axisId: string; email: string; row: DemoApplicantRow }
   | { ok: false; error: string }
@@ -256,6 +256,11 @@ export async function ensureResidentSetupTokenForApplication(
   };
   const email = (row.email ?? "").trim().toLowerCase();
   if (!email.includes("@")) return { ok: false, error: "Application is missing an email." };
+
+  const preferred = options?.preferredToken?.trim();
+  if (preferred && isResidentSetupTokenValid(row, preferred)) {
+    return { ok: true, token: preferred, axisId: row.id, email, row };
+  }
 
   const { row: withToken, token } = attachResidentSetupToken(row);
   await db.from("manager_application_records").upsert(

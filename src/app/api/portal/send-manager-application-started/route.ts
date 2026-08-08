@@ -99,7 +99,10 @@ export async function POST(req: Request) {
     }
 
     const origin = appOrigin();
-    const resumeUrl = inProgressApplicationResumeUrl(origin, row);
+    const resumeUrl = inProgressApplicationResumeUrl(origin, ensured.row, {
+      token: ensured.token,
+      axisId: ensured.axisId,
+    });
     const signupUrl = `${origin}${buildResidentSetupHref(ensured.token, ensured.axisId)}`;
     const text = buildApplicationStartedEmailBody({
       applicantName: row.name || undefined,

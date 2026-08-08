@@ -621,6 +621,7 @@ export async function POST(req: Request) {
       id?: string;
       row?: DemoApplicantRow;
       rows?: DemoApplicantRow[];
+      setupToken?: string;
       existingResidentOnboarding?: { sendWelcomeEmail?: boolean };
     };
     const db = createSupabaseServiceRoleClient();
@@ -804,7 +805,11 @@ export async function POST(req: Request) {
         .limit(1);
       if (loadError) return NextResponse.json({ error: loadError.message }, { status: 500 });
       const existing = records?.[0]?.row_data as DemoApplicantRow | undefined;
-      const guest = await prepareGuestApplicationUpsert(db, { row, existing: existing ?? null });
+      const guest = await prepareGuestApplicationUpsert(db, {
+        row,
+        existing: existing ?? null,
+        clientSetupToken: typeof body.setupToken === "string" ? body.setupToken : null,
+      });
       if (!guest.ok) {
         return NextResponse.json({ error: guest.error }, { status: guest.status });
       }

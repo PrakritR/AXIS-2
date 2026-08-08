@@ -1,5 +1,5 @@
 import type { DemoApplicantRow } from "@/data/demo-portal";
-import { attachResidentSetupToken } from "@/lib/auth/resident-setup-token";
+import { attachResidentSetupToken, isResidentSetupTokenValid } from "@/lib/auth/resident-setup-token";
 import { normalizeApplicationAxisId } from "@/lib/manager-applications-storage";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -52,6 +52,8 @@ export async function prepareGuestApplicationUpsert(
   params: {
     row: DemoApplicantRow;
     existing?: DemoApplicantRow | null;
+    /** When the browser still holds the row's current setup token, keep it so emailed resume links stay valid. */
+    clientSetupToken?: string | null;
   },
 ): Promise<GuestApplicationUpsertResult> {
   const email = (params.row.email ?? "").trim().toLowerCase();
@@ -117,6 +119,20 @@ export async function prepareGuestApplicationUpsert(
           }
         : params.row.application,
   };
+
+  const clientToken = params.clientSetupToken?.trim();
+  if (params.existing && clientToken && isResidentSetupTokenValid(params.existing, clientToken)) {
+    return {
+      ok: true,
+      row: {
+        ...baseRow,
+        setupTokenHash: params.existing.setupTokenHash,
+        setupTokenExpiresAt: params.existing.setupTokenExpiresAt,
+        setupTokenConsumedAt: params.existing.setupTokenConsumedAt,
+      },
+      setupToken: clientToken,
+    };
+  }
 
   const { row, token } = attachResidentSetupToken(baseRow);
   return { ok: true, row, setupToken: token };

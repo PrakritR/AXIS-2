@@ -445,14 +445,107 @@ export function applyListingFeesToSubmission(
   };
 }
 
+/** Standard fee row ids the manager may remove from the unified Pricing table. */
+export type RemovedStandardListingFeeRowId =
+  | "rent"
+  | "applicationFee"
+  | "securityDeposit"
+  | "moveInFee"
+  | "holdingDeposit"
+  | "parkingMonthly"
+  | "hoaMonthly"
+  | "otherMonthlyFees"
+  | "monthToMonthSurcharge";
+
+const REMOVED_STANDARD_FEE_ROW_IDS = new Set<string>([
+  "rent",
+  "applicationFee",
+  "securityDeposit",
+  "moveInFee",
+  "holdingDeposit",
+  "parkingMonthly",
+  "hoaMonthly",
+  "otherMonthlyFees",
+  "monthToMonthSurcharge",
+]);
+
+/** Standard "Other fees" rows hidden until the manager adds them via + Add fee. */
+export const DEFAULT_HIDDEN_STANDARD_LISTING_FEE_ROW_IDS: readonly RemovedStandardListingFeeRowId[] = [
+  "securityDeposit",
+  "moveInFee",
+  "holdingDeposit",
+  "parkingMonthly",
+  "hoaMonthly",
+  "otherMonthlyFees",
+  "monthToMonthSurcharge",
+] as const;
+
+export function defaultRemovedStandardListingFeeRowsForNewListing(): RemovedStandardListingFeeRowId[] {
+  return [...DEFAULT_HIDDEN_STANDARD_LISTING_FEE_ROW_IDS];
+}
+
+/** Preset rows to drop when a standard fee row is removed (incl. paired short-term presets). */
+const REMOVED_ROW_EXCLUDED_PRESET_IDS: Partial<Record<RemovedStandardListingFeeRowId, readonly ListingFeePresetId[]>> = {
+  holdingDeposit: ["holding_deposit"],
+  securityDeposit: ["security_deposit", "short_term_deposit"],
+  moveInFee: ["move_in_fee", "short_term_move_in"],
+  parkingMonthly: ["parking_monthly"],
+  hoaMonthly: ["hoa_monthly"],
+  otherMonthlyFees: ["other_monthly"],
+  monthToMonthSurcharge: ["mtm_surcharge"],
+  rent: ["short_term_nightly"],
+  applicationFee: [],
+};
+
+export function parseRemovedStandardListingFeeRows(
+  sub: Pick<ManagerListingSubmissionV1, "removedStandardListingFeeRows">,
+): RemovedStandardListingFeeRowId[] {
+  const raw = sub.removedStandardListingFeeRows;
+  if (!Array.isArray(raw)) return [];
+  return raw.filter(
+    (id): id is RemovedStandardListingFeeRowId =>
+      typeof id === "string" && REMOVED_STANDARD_FEE_ROW_IDS.has(id),
+  );
+}
+
+export function removedStandardListingFeeRowSet(
+  sub: Pick<ManagerListingSubmissionV1, "removedStandardListingFeeRows">,
+): Set<RemovedStandardListingFeeRowId> {
+  return new Set(parseRemovedStandardListingFeeRows(sub));
+}
+
+export function presetIdsExcludedForRemovedListingFeeRows(
+  removed: Iterable<RemovedStandardListingFeeRowId>,
+): Set<ListingFeePresetId> {
+  const out = new Set<ListingFeePresetId>();
+  for (const rowId of removed) {
+    for (const presetId of REMOVED_ROW_EXCLUDED_PRESET_IDS[rowId] ?? []) {
+      out.add(presetId);
+    }
+  }
+  return out;
+}
+
 /** Ensure submission has unified fees + legacy fields in sync (call from normalize). */
 export function ensureSubmissionListingFees(sub: ManagerListingSubmissionV1): ManagerListingSubmissionV1 {
+  const removedRows = removedStandardListingFeeRowSet(sub);
+  const excludedPresets = presetIdsExcludedForRemovedListingFeeRows(removedRows);
   let fees = resolveListingFees(sub);
+  if (excludedPresets.size > 0) {
+    fees = fees.filter(
+      (f) => !f.presetId || f.presetId === "custom" || !excludedPresets.has(f.presetId as ListingFeePresetId),
+    );
+  }
   if (!submissionUsesUnifiedListingFees(sub.customFees)) {
     const customs = (sub.customFees ?? []).map(normalizeListingFeeRow).filter((f) => !f.presetId || f.presetId === "custom");
     fees = [...fees.filter((f) => f.presetId !== "custom"), ...customs];
   }
-  return applyListingFeesToSubmission(sub, fees);
+  const next = applyListingFeesToSubmission(sub, fees);
+  const removed = parseRemovedStandardListingFeeRows(sub);
+  return {
+    ...next,
+    removedStandardListingFeeRows: removed.length > 0 ? removed : [],
+  };
 }
 
 export function validateListingFeeRows(

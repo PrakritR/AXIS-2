@@ -32,6 +32,7 @@ export function ApplicationFeeInlinePayment({
   residentEmail,
   residentName,
   managerUserId,
+  rentalType,
   returnPath,
   onItemization,
 }: {
@@ -39,6 +40,7 @@ export function ApplicationFeeInlinePayment({
   residentEmail: string;
   residentName?: string;
   managerUserId: string;
+  rentalType?: "standard" | "short_term";
   /** App path Stripe returns to after payment (must start with "/"). */
   returnPath: string;
   onItemization?: (view: ApplicationFeeItemizationView) => void;
@@ -59,7 +61,15 @@ export function ApplicationFeeInlinePayment({
       const res = await fetch("/api/stripe/application-fee-checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ propertyId, residentEmail, residentName, managerUserId, mode: "embedded", returnPath }),
+        body: JSON.stringify({
+          propertyId,
+          residentEmail,
+          residentName,
+          managerUserId,
+          rentalType: rentalType === "short_term" ? "short_term" : undefined,
+          mode: "embedded",
+          returnPath,
+        }),
       });
       const data = (await res.json().catch(() => ({}))) as {
         clientSecret?: string;
@@ -86,7 +96,7 @@ export function ApplicationFeeInlinePayment({
       setLoading(false);
       inFlight.current = false;
     }
-  }, [propertyId, residentEmail, residentName, managerUserId, returnPath, onItemization]);
+  }, [propertyId, residentEmail, residentName, managerUserId, rentalType, returnPath, onItemization]);
 
   // The wizard is embedded in dual-mount (mobile-card + desktop-table) lists,
   // so TWO live copies of this component can exist with CSS deciding which is

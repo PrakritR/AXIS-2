@@ -222,6 +222,14 @@ describe("in-progress-application", () => {
     expect(inProgressApplicationResumeUrl("https://axis.test", row)).toBe(
       "https://axis.test/rent/apply?propertyId=prop-1",
     );
+    expect(
+      inProgressApplicationResumeUrl("https://axis.test", row, {
+        token: "resume-token",
+        axisId: "PROPLANE-57B6CC11",
+      }),
+    ).toBe(
+      "https://axis.test/rent/apply?propertyId=prop-1&token=resume-token&proplane_id=PROPLANE-57B6CC11",
+    );
   });
 
   it("builds a pending in-progress row from wizard form", () => {

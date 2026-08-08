@@ -1,11 +1,7 @@
 /**
- * Auto-seed a default flyer and listing blurb per property — modeled on
- * {@link syncPropertyLeaseTemplatesFromListing}. Uses deterministic fallback
- * copy from listing facts (no AI) so the Promotion tab is never empty on first open.
- *
- * Entries whose ids end with {@link DEFAULT_PROMOTION_FLYER_SEED_SUFFIX} /
- * {@link DEFAULT_PROMOTION_TEXT_SEED_SUFFIX} are system-owned: they refresh when
- * listing photos or facts change (e.g. merging media onto an existing property).
+ * Auto-seed helpers for listing-derived promotion defaults. Managers add these
+ * from the property Promotion tab (like request-type presets) — nothing is
+ * created on panel open.
  */
 
 import type { MockProperty } from "@/data/types";
@@ -175,10 +171,105 @@ export type EnsureDefaultPromotionOpts = {
   existingRow?: ManagerPromotionRow | null;
 };
 
+export type PromotionPresetKind = "default_flyer" | "default_listing_blurb";
+
+export const PROMOTION_PRESET_DEFS: ReadonlyArray<{
+  kind: PromotionPresetKind;
+  name: string;
+  description: string;
+}> = [
+  {
+    kind: "default_flyer",
+    name: "Flyer from listing",
+    description: "Printable flyer from your listing photos and facts (no AI).",
+  },
+  {
+    kind: "default_listing_blurb",
+    name: "Listing blurb",
+    description: "Short marketing copy for email and social from listing details.",
+  },
+] as const;
+
+export function missingPromotionPresets(
+  propertyId: string,
+  existingRow: ManagerPromotionRow | null,
+): PromotionPresetKind[] {
+  const pid = propertyId.trim();
+  if (!pid) return [];
+  const flyers = existingRow ? readFlyerEntries(existingRow) : [];
+  const texts = existingRow ? readPromotionTextEntries(existingRow) : [];
+  const missing: PromotionPresetKind[] = [];
+  const flyerId = defaultPromotionFlyerEntryId(pid);
+  const textId = defaultPromotionTextEntryId(pid);
+  if (!flyers.some((e) => e.id === flyerId)) missing.push("default_flyer");
+  if (!texts.some((e) => e.id === textId)) missing.push("default_listing_blurb");
+  return missing;
+}
+
+/**
+ * Add one listing-derived default promotion the manager chose — never runs on
+ * panel open. Returns null when that preset already exists on the row.
+ */
+export function addDefaultPromotionPreset(
+  opts: EnsureDefaultPromotionOpts & { preset: PromotionPresetKind },
+): ManagerPromotionRow | null {
+  const propertyId = opts.propertyId.trim();
+  if (!propertyId) return null;
+
+  const inputs = inputsFromListing(opts.property, {
+    managerContact: opts.managerContact,
+    appOrigin: opts.appOrigin,
+  });
+  const propertyLabel = buildPromotionDraftAutofill(opts.property, {
+    managerContact: opts.managerContact,
+    appOrigin: opts.appOrigin,
+  }).propertyLabel;
+
+  const now = new Date().toISOString();
+  const flyerSeedId = defaultPromotionFlyerEntryId(propertyId);
+  const textSeedId = defaultPromotionTextEntryId(propertyId);
+  const existingFlyers = opts.existingRow ? readFlyerEntries(opts.existingRow) : [];
+  const existingTexts = opts.existingRow ? readPromotionTextEntries(opts.existingRow) : [];
+
+  let row =
+    opts.existingRow ??
+    emptyPromotionRow({
+      propertyId,
+      propertyLabel,
+      managerUserId: opts.managerUserId,
+      now,
+    });
+
+  let changed = false;
+
+  if (opts.preset === "default_flyer" && !existingFlyers.some((e) => e.id === flyerSeedId)) {
+    row = appendFlyerEntryToRow(
+      row,
+      buildDefaultFlyerEntry(propertyId, inputs, propertyLabel, now),
+    );
+    changed = true;
+  }
+
+  if (opts.preset === "default_listing_blurb" && !existingTexts.some((e) => e.id === textSeedId)) {
+    row = appendTextEntryToRow(row, buildDefaultTextEntry(propertyId, inputs, propertyLabel, now));
+    changed = true;
+  }
+
+  if (!changed) return null;
+
+  return syncPromotionRowLegacy({
+    ...row,
+    managerUserId: opts.managerUserId,
+    propertyId,
+    propertyLabel,
+    inputs,
+    updatedAt: now,
+  });
+}
+
 /**
  * Create or refresh the seeded default flyer and listing blurb from current
- * listing facts. System-owned seed entries update when photos or copy change;
- * manager-created assets are never touched. Returns null when already in sync.
+ * listing facts. Used by test seeds — not called on manager panel open.
  */
 export function ensureDefaultPromotionAssets(opts: EnsureDefaultPromotionOpts): ManagerPromotionRow | null {
   const propertyId = opts.propertyId.trim();

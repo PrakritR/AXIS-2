@@ -69,19 +69,14 @@ import {
   makePromotionUploadId,
   type PromotionUploadEntry,
 } from "@/lib/promotion-upload";
-import { ensureDefaultPromotionAssets, isSystemOwnedPromotionEntryId } from "@/lib/promotion-default-sync";
+import { PromotionDefaultSuggestions } from "@/components/portal/promotion-default-suggestions";
+import { addDefaultPromotionPreset, type PromotionPresetKind } from "@/lib/promotion-default-sync";
 
 function promotionEntryId(asset: PromotionAsset): string | null {
   if (asset.kind === "flyer") return asset.flyerEntry?.id ?? null;
   if (asset.kind === "text") return asset.textEntry?.id ?? null;
   if (asset.kind === "upload") return asset.uploadEntry?.id ?? null;
   return null;
-}
-
-function canDeletePromotionAsset(asset: PromotionAsset): boolean {
-  const entryId = promotionEntryId(asset);
-  if (!entryId) return false;
-  return !isSystemOwnedPromotionEntryId(entryId);
 }
 
 function flyerEntryToDraft(row: ManagerPromotionRow, entry: FlyerEntry, listingId: string): PromotionDraft {
@@ -171,6 +166,12 @@ export function ManagerPropertyPromotionPanel({
 
   const propertyId = listingId.trim();
 
+  const promotionRow = useMemo(() => {
+    void tick;
+    if (!propertyId) return null;
+    return readManagerPromotionRows().find((row) => row.propertyId === propertyId) ?? null;
+  }, [propertyId, tick]);
+
   const assets = useMemo(() => {
     void tick;
     if (!propertyId) return [];
@@ -178,35 +179,35 @@ export function ManagerPropertyPromotionPanel({
     return sortPromotionAssets(flattenPromotionAssets(rows), "newest");
   }, [propertyId, tick]);
 
-  // Seed a default flyer + listing blurb from listing facts when this property
-  // has none yet (same idea as auto-seeded lease templates on the Lease tab).
-  useEffect(() => {
-    if (!authReady || !userId || !propertyId) return;
-    const listing = listings.find((l) => l.id === propertyId);
-    if (!listing?.property) return;
-
-    let cancelled = false;
-    void syncManagerPromotionsFromServer({ force: true }).then(() => {
-      if (cancelled) return;
+  const addPromotionPreset = useCallback(
+    (preset: PromotionPresetKind) => {
+      if (!userId || !propertyId) return;
+      const listing = listings.find((l) => l.id === propertyId);
+      if (!listing?.property) {
+        showToast("Listing details are not available yet.");
+        return;
+      }
       const existingRow = readManagerPromotionRows().find((row) => row.propertyId === propertyId) ?? null;
-      const seeded = ensureDefaultPromotionAssets({
+      const next = addDefaultPromotionPreset({
         propertyId,
         property: listing.property,
         managerUserId: userId,
         managerContact: autofillOpts.managerContact,
         appOrigin: autofillOpts.appOrigin,
         existingRow,
+        preset,
       });
-      if (!seeded) return;
-      upsertManagerPromotion(seeded);
+      if (!next) {
+        showToast("That promotion is already on this property.");
+        return;
+      }
+      upsertManagerPromotion(next);
       setTick((n) => n + 1);
       onUpdated?.();
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authReady, userId, propertyId, listings, autofillOpts, onUpdated, propertyTick]);
+      showToast("Promotion added from listing.");
+    },
+    [userId, propertyId, listings, autofillOpts, showToast, onUpdated],
+  );
 
   // Open the unified "New promotion" modal (type dropdown + inline form, no
   // separate "Continue" step) seeded to this property.
@@ -487,10 +488,6 @@ export function ManagerPropertyPromotionPanel({
   }
 
   function handleDeleteAsset(asset: PromotionAsset) {
-    if (!canDeletePromotionAsset(asset)) {
-      showToast("Default flyer and listing blurb cannot be removed.");
-      return;
-    }
     const title = asset.flyerEntry?.title ?? asset.textEntry?.title ?? asset.uploadEntry?.title ?? "Promotion";
     if (!window.confirm(`Delete "${title}"? This cannot be undone.`)) return;
     if (previewAssetId === asset.id) closePreview();
@@ -569,15 +566,27 @@ export function ManagerPropertyPromotionPanel({
     <>
       <PortalPropertyDetailSection contentClassName="space-y-0">
         {headerActionsExtra ? <div className="mb-3">{headerActionsExtra}</div> : null}
-        <PromotionAssetStack
-          assets={assets}
-          variant="plain"
-          showPropertyLabel={false}
-          emptyMessage=""
-          onView={openViewAsset}
-          onEdit={openEditAsset}
-        />
+        {assets.length === 0 ? (
+          <p className="px-1 py-2 text-sm text-muted">No promotions yet. Add a suggested default below or tap Add.</p>
+        ) : (
+          <PromotionAssetStack
+            assets={assets}
+            variant="plain"
+            showPropertyLabel={false}
+            emptyMessage=""
+            onView={openViewAsset}
+            onEdit={openEditAsset}
+          />
+        )}
       </PortalPropertyDetailSection>
+
+      <div className="mt-4">
+        <PromotionDefaultSuggestions
+          propertyId={propertyId}
+          promotionRow={promotionRow}
+          onAddPreset={addPromotionPreset}
+        />
+      </div>
 
       <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
         <PortalListAddRow
