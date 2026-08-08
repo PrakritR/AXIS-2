@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import type { ReactNode } from "react";
 import { LandingDashboardChatDemo } from "@/components/marketing/landing-dashboard-chat-demo";
 import { LandingInboxApproveDemo } from "@/components/marketing/landing-inbox-approve-demo";
 import { BOOK_DEMO_HREF, MANAGER_GET_STARTED_HREF } from "@/lib/marketing/public-contact";
@@ -179,7 +180,7 @@ function TaskFloatRow({
  *  resident setup-link onboarding (`api/auth/resident-setup`), and the iOS shell
  *  (`docs/mobile-app.md`). Keep it that way: an FAQ reads as a promise, so don't
  *  add a claim the code can't back. */
-const FAQ_NOTES: { q: string; a: string }[] = [
+const FAQ_NOTES: { q: string; a: ReactNode }[] = [
   {
     q: "What is PropLane?",
     a: "One place to run your rentals: list a unit, take applications, book tours, sign leases, collect rent, and handle repairs and messages. Managers, residents, and your repair vendors each get their own sign-in.",
@@ -206,7 +207,15 @@ const FAQ_NOTES: { q: string; a: string }[] = [
   },
   {
     q: "Can I use it on my phone?",
-    a: "Yes. PropLane opens in any web browser on a computer, tablet, or phone — no download needed. There's also an iPhone app that shows the same PropLane, so everything works the same way.",
+    a: (
+      <>
+        Yes. PropLane opens in any web browser on a computer, tablet, or phone — no download needed. There is also a{" "}
+        <Link href="/app" className="font-semibold text-[var(--lp-brand)] hover:underline">
+          mobile app
+        </Link>{" "}
+        with the same portals, push notifications, and camera uploads.
+      </>
+    ),
   },
 ];
 

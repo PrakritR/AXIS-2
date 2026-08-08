@@ -39,6 +39,13 @@ export function LandingHero() {
               Contact us
             </Link>
           </div>
+          <p className="native-hide mt-5 text-sm text-muted">
+            <Link href="/app" className="font-semibold text-primary hover:underline" data-attr="home-hero-mobile-app">
+              Mobile app
+            </Link>
+            {" · "}
+            Push notifications and inbox on the go.
+          </p>
         </RevealOnView>
       </div>
     </section>

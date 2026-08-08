@@ -246,6 +246,7 @@ export const CO_MANAGER_ALWAYS_ALLOWED_SECTIONS = new Set([
   "dashboard",
   "profile",
   "bugs-feedback",
+  "app",
 ]);
 
 /** Map property portal sections to co-manager permission ids. */

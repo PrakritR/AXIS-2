@@ -28,8 +28,13 @@ export function isHiddenFromMobileNav(kind: PortalKind, section: string): boolea
   return false;
 }
 
+/** Hide the App download tab while already inside the native iOS/Android shell. */
+export function isAppNavHiddenInNativeShell(kind: PortalKind, section: string, inNativeShell: boolean): boolean {
+  return inNativeShell && (kind === "manager" || kind === "pro") && section === "app";
+}
+
 const PRO_GROUPS: NavGroupConfig[] = [
-  { id: "home", label: null, sections: ["dashboard"] },
+  { id: "home", label: null, sections: ["dashboard", "app"] },
   { id: "leasing", label: "Leasing", sections: ["properties", "calendar", "applications", "leases"] },
   { id: "tenancy", label: "Tenancy", sections: ["residents", "payments"] },
   { id: "operations", label: "Operations", sections: ["services", "communication"] },

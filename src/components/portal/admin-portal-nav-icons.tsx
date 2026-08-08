@@ -17,6 +17,7 @@ import {
   MessagesSquare,
   ScrollText,
   Settings,
+  Smartphone,
   Truck,
   Users,
   Wrench,
@@ -51,6 +52,7 @@ const SECTION_ICONS: Record<string, LucideIcon> = {
   relationships: Link2,
   "move-in": LogIn,
   promotion: Megaphone,
+  app: Smartphone,
 };
 
 /**
