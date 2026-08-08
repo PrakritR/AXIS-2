@@ -105,6 +105,77 @@ describe("copy_listing_photos tool", () => {
     expect(listingSubmission?.rooms?.[0]?.photoDataUrls).toEqual(["https://example.test/room-1.jpg"]);
   });
 
+  it("copies shared-space media when the target has no shared-space rows yet", async () => {
+    const { ctx, store } = makeWritableCtx({
+      manager_property_records: [
+        propertyRecord(SOURCE_ID, {
+          buildingName: "5257 Brooklyn Ave NE",
+          housePhotos: [],
+          roomPhotos: [],
+        }),
+        {
+          ...propertyRecord(TARGET_ID, {
+            buildingName: "5259 Brooklyn Ave NE",
+          }),
+          row_data: {
+            submission: {
+              v: 1,
+              buildingName: "5259 Brooklyn Ave NE",
+              address: "5259 Brooklyn Ave NE, Seattle, WA",
+              housePhotoDataUrls: [],
+              rooms: [{ id: "room-1", name: "Room 1", photoDataUrls: [] }],
+              bathrooms: [],
+              sharedSpaces: [],
+            },
+          },
+          property_data: {
+            buildingName: "5259 Brooklyn Ave NE",
+            listingSubmission: {
+              v: 1,
+              buildingName: "5259 Brooklyn Ave NE",
+              address: "5259 Brooklyn Ave NE, Seattle, WA",
+              housePhotoDataUrls: [],
+              rooms: [{ id: "room-1", name: "Room 1", photoDataUrls: [] }],
+              bathrooms: [],
+              sharedSpaces: [],
+            },
+          },
+        },
+      ],
+      audit_log: [],
+    });
+
+    const source = store.manager_property_records!.find((r) => r.id === SOURCE_ID)!;
+    const submission = (source.property_data as { listingSubmission: Record<string, unknown> }).listingSubmission;
+    submission.sharedSpaces = [
+      {
+        id: "sspace-1",
+        name: "Kitchen & dining",
+        spaceKind: "kitchen",
+        photoDataUrls: ["https://example.test/kitchen.jpg"],
+        videoDataUrl: null,
+        roomAccessIds: ["room-1"],
+      },
+    ];
+    if (source.row_data && typeof source.row_data === "object") {
+      (source.row_data as { submission: Record<string, unknown> }).submission = submission;
+    }
+
+    const result = await executeWrite(copyListingPhotosTool, ctx, {
+      sourcePropertyId: SOURCE_ID,
+      targetPropertyId: TARGET_ID,
+    });
+    expect(result.ok).toBe(true);
+
+    const target = store.manager_property_records!.find((r) => r.id === TARGET_ID)!;
+    const listingSubmission = (target.property_data as {
+      listingSubmission?: { sharedSpaces?: { name: string; photoDataUrls?: string[] }[] };
+    }).listingSubmission;
+    expect(listingSubmission?.sharedSpaces).toHaveLength(1);
+    expect(listingSubmission?.sharedSpaces?.[0]?.name).toBe("Kitchen & dining");
+    expect(listingSubmission?.sharedSpaces?.[0]?.photoDataUrls).toEqual(["https://example.test/kitchen.jpg"]);
+  });
+
   it("refuses when source and target are the same property", async () => {
     const { ctx } = makeWritableCtx({
       manager_property_records: [propertyRecord(SOURCE_ID, { buildingName: "5257 Brooklyn Ave NE" })],
