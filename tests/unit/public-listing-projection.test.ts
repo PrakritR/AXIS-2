@@ -62,6 +62,8 @@ function storedListing(): MockProperty {
           moveInAvailableDate: "2026-08-01",
           // Manager/resident-internal: door codes and key handoff.
           moveInInstructions: "Lockbox code 4821, keys under the mat",
+          moveInPhotoDataUrls: ["https://cdn.example/move-in-photo.jpg"],
+          moveInVideoDataUrl: "https://cdn.example/move-in-video.mp4",
           manualUnavailableRanges: [],
           detail: "Sunny",
           furnishing: "Furnished",
@@ -140,6 +142,10 @@ describe("publicListingProjection", () => {
       "lateFeeAmount",
       "achPaymentLink",
       "moveInInstructions",
+      "moveInPhotoDataUrls",
+      "moveInVideoDataUrl",
+      "houseMoveInPhotoDataUrls",
+      "houseMoveInVideoDataUrl",
     ]) {
       expect(keys.has(secret), `${secret} must not reach an anonymous caller`).toBe(false);
     }

@@ -10,6 +10,7 @@ import {
   PortalPropertyDetailSection,
 } from "@/components/portal/portal-property-detail-section";
 import { PortalDetailHeader } from "@/components/portal/portal-list-detail-shell";
+import { MoveInMediaFields } from "@/components/portal/move-in-media-fields";
 import { updateRequestChangeProperty } from "@/lib/demo-admin-property-inventory";
 import {
   updateExtraListingFromSubmission,
@@ -54,9 +55,22 @@ function MoveInInstructionsField({
 }
 
 function roomMoveInSummary(room: ManagerRoomSubmission): string {
-  const instructions = room.moveInInstructions?.trim();
-  if (instructions) return "Instructions set";
+  const parts: string[] = [];
+  if (room.moveInInstructions?.trim()) parts.push("Instructions set");
+  if ((room.moveInPhotoDataUrls?.length ?? 0) > 0) parts.push(`${room.moveInPhotoDataUrls!.length} photo(s)`);
+  if (room.moveInVideoDataUrl) parts.push("Video");
+  if (parts.length > 0) return parts.join(" · ");
   return "No move-in details yet";
+}
+
+function roomMediaMatches(a: ManagerRoomSubmission, b: ManagerRoomSubmission): boolean {
+  const aPhotos = a.moveInPhotoDataUrls ?? [];
+  const bPhotos = b.moveInPhotoDataUrls ?? [];
+  return (
+    aPhotos.length === bPhotos.length &&
+    aPhotos.every((url, index) => url === bPhotos[index]) &&
+    (a.moveInVideoDataUrl ?? null) === (b.moveInVideoDataUrl ?? null)
+  );
 }
 
 export function ManagerPropertyRoomMoveInPanel({
@@ -79,12 +93,16 @@ export function ManagerPropertyRoomMoveInPanel({
   const [selectedRoomId, setSelectedRoomId] = useState<string | null>(null);
   const [draftByRoomId, setDraftByRoomId] = useState<Record<string, ManagerRoomSubmission>>({});
   const [houseInstructions, setHouseInstructions] = useState(sub.houseMoveInInstructions ?? "");
+  const [housePhotos, setHousePhotos] = useState(sub.houseMoveInPhotoDataUrls ?? []);
+  const [houseVideo, setHouseVideo] = useState(sub.houseMoveInVideoDataUrl ?? null);
   const [savingRoomId, setSavingRoomId] = useState<string | null>(null);
   const [savingHouse, setSavingHouse] = useState(false);
 
   useEffect(() => {
     setDraftByRoomId(Object.fromEntries(sub.rooms.map((room) => [room.id, room])));
     setHouseInstructions(sub.houseMoveInInstructions ?? "");
+    setHousePhotos(sub.houseMoveInPhotoDataUrls ?? []);
+    setHouseVideo(sub.houseMoveInVideoDataUrl ?? null);
     setSelectedRoomId((current) =>
       current && sub.rooms.some((room) => room.id === current) ? current : null,
     );
@@ -113,7 +131,9 @@ export function ManagerPropertyRoomMoveInPanel({
 
   const roomDirty = (room: ManagerRoomSubmission) => {
     const draft = roomDraft(room);
-    return (draft.moveInInstructions ?? "") !== (room.moveInInstructions ?? "");
+    return (
+      (draft.moveInInstructions ?? "") !== (room.moveInInstructions ?? "") || !roomMediaMatches(draft, room)
+    );
   };
 
   const saveRoom = (room: ManagerRoomSubmission) => {
@@ -127,6 +147,8 @@ export function ManagerPropertyRoomMoveInPanel({
             ? {
                 ...r,
                 moveInInstructions: draft.moveInInstructions ?? "",
+                moveInPhotoDataUrls: [...(draft.moveInPhotoDataUrls ?? [])],
+                moveInVideoDataUrl: draft.moveInVideoDataUrl ?? null,
               }
             : r,
         ),
@@ -136,7 +158,10 @@ export function ManagerPropertyRoomMoveInPanel({
     setSavingRoomId(null);
   };
 
-  const houseDirty = houseInstructions !== (sub.houseMoveInInstructions ?? "");
+  const houseDirty =
+    houseInstructions !== (sub.houseMoveInInstructions ?? "") ||
+    housePhotos.join("|") !== (sub.houseMoveInPhotoDataUrls ?? []).join("|") ||
+    (houseVideo ?? null) !== (sub.houseMoveInVideoDataUrl ?? null);
 
   const saveHouse = () => {
     setSavingHouse(true);
@@ -144,6 +169,8 @@ export function ManagerPropertyRoomMoveInPanel({
       {
         ...sub,
         houseMoveInInstructions: houseInstructions,
+        houseMoveInPhotoDataUrls: [...housePhotos],
+        houseMoveInVideoDataUrl: houseVideo,
       },
       "Move-in details saved.",
     );
@@ -177,6 +204,14 @@ export function ManagerPropertyRoomMoveInPanel({
               moveInInstructions={houseInstructions}
               disabled={!canEdit}
               onInstructionsChange={setHouseInstructions}
+            />
+            <MoveInMediaFields
+              photoDataUrls={housePhotos}
+              videoDataUrl={houseVideo}
+              disabled={!canEdit}
+              onPhotosChange={setHousePhotos}
+              onVideoChange={setHouseVideo}
+              onError={showToast}
             />
           </div>
         </div>
@@ -238,6 +273,24 @@ export function ManagerPropertyRoomMoveInPanel({
                 [room.id]: { ...draft, moveInInstructions: value },
               }))
             }
+          />
+          <MoveInMediaFields
+            photoDataUrls={draft.moveInPhotoDataUrls ?? []}
+            videoDataUrl={draft.moveInVideoDataUrl ?? null}
+            disabled={!canEdit}
+            onPhotosChange={(urls) =>
+              setDraftByRoomId((prev) => ({
+                ...prev,
+                [room.id]: { ...draft, moveInPhotoDataUrls: urls },
+              }))
+            }
+            onVideoChange={(url) =>
+              setDraftByRoomId((prev) => ({
+                ...prev,
+                [room.id]: { ...draft, moveInVideoDataUrl: url },
+              }))
+            }
+            onError={showToast}
           />
         </div>
       </PortalPropertyDetailSection>

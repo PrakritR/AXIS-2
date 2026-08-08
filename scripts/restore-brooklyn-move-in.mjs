@@ -9,9 +9,12 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  BROOKLYN_PROPERTY_ID,
+  applyBrooklynMoveInInstructions,
+} from "./brooklyn-move-in-data.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const PROPERTY_ID = "mgr-seed-5259-brooklyn-ave-ne";
 
 const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
 const key = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim();
@@ -20,60 +23,12 @@ if (!url || !key) {
   process.exit(1);
 }
 
-const HOUSE_CODES = [
-  "Access codes:",
-  "House code: 7500",
-  "Front gate: 075",
-  "Back gate: 7501",
-  "Pantry: 9752",
-  "Backup house code: 2572",
-].join("\n");
-
-const ROOM_NOTES = {
-  "seed-5259-brooklyn-room-1": "Assigned to Room 1 (2-person bathroom share with Room 2).",
-  "seed-5259-brooklyn-room-2": "Assigned to Room 2 (2-person bathroom share with Room 1).",
-  "seed-5259-brooklyn-room-3": "Assigned to Room 3 (3-person bathroom share with Rooms 4 & 5).",
-  "seed-5259-brooklyn-room-4": "Assigned to Room 4 (3-person bathroom share with Rooms 3 & 5).",
-  "seed-5259-brooklyn-room-5": "Assigned to Room 5 (3-person bathroom share with Rooms 3 & 4).",
-  "seed-5259-brooklyn-room-6": "Assigned to Room 6 (4-person bathroom share with Rooms 7, 8 & 9).",
-  "seed-5259-brooklyn-room-7": "Assigned to Room 7 (4-person bathroom share with Rooms 6, 8 & 9).",
-  "seed-5259-brooklyn-room-8": "Assigned to Room 8 (4-person bathroom share with Rooms 6, 7 & 9).",
-  "seed-5259-brooklyn-room-9": "Assigned to Room 9 (4-person bathroom share with Rooms 6, 7 & 8).",
-};
-
-function roomMoveIn(roomId, roomNum) {
-  return [
-    ROOM_NOTES[roomId],
-    "",
-    HOUSE_CODES,
-    "",
-    `Use front gate code 075, then house code 7500 at the front door. Your bedroom is Room ${roomNum}.`,
-  ].join("\n");
-}
-
 function loadRestorePropertyData() {
   const sql = fs.readFileSync(
     path.join(__dirname, "../supabase/migrations/20260730124500_restore_5259_brooklyn_production.sql"),
     "utf8",
   );
   return JSON.parse(sql.match(/'(\{.*\})'/s)[1]);
-}
-
-function applyMoveInInstructions(propertyData) {
-  const sub = propertyData.listingSubmission;
-  sub.generalHouseInfo = [
-    "Access codes for 5259 Brooklyn Ave NE:",
-    "House code: 7500",
-    "Front gate: 075",
-    "Back gate: 7501",
-    "Pantry: 9752",
-    "Backup house code: 2572",
-  ].join("\n");
-  for (const room of sub.rooms) {
-    const num = room.name.replace("Room ", "");
-    room.moveInInstructions = roomMoveIn(room.id, num);
-  }
-  return propertyData;
 }
 
 async function api(pathname, options = {}) {
@@ -101,7 +56,7 @@ async function api(pathname, options = {}) {
 
 async function resolveManagerUserId() {
   const existing = await api(
-    `/rest/v1/manager_property_records?id=eq.${PROPERTY_ID}&select=manager_user_id`,
+    `/rest/v1/manager_property_records?id=eq.${BROOKLYN_PROPERTY_ID}&select=manager_user_id`,
   );
   if (existing?.[0]?.manager_user_id) return existing[0].manager_user_id;
 
@@ -120,11 +75,11 @@ async function resolveManagerUserId() {
 async function main() {
   const ref = new URL(url).hostname.split(".")[0];
   const managerUserId = await resolveManagerUserId();
-  const propertyData = applyMoveInInstructions(loadRestorePropertyData());
+  const propertyData = applyBrooklynMoveInInstructions(loadRestorePropertyData());
   propertyData.managerUserId = managerUserId;
 
   const body = {
-    id: PROPERTY_ID,
+    id: BROOKLYN_PROPERTY_ID,
     manager_user_id: managerUserId,
     status: "live",
     property_data: propertyData,
@@ -140,8 +95,9 @@ async function main() {
   const room4 = rows[0].property_data.listingSubmission.rooms.find(
     (r) => r.id === "seed-5259-brooklyn-room-4",
   );
-  console.log(`[${ref}] Restored/updated ${PROPERTY_ID} for manager ${managerUserId}`);
+  console.log(`[${ref}] Restored/updated ${BROOKLYN_PROPERTY_ID} for manager ${managerUserId}`);
   console.log(`[${ref}] Room 4 move-in set (${room4.moveInInstructions.length} chars)`);
+  console.log(`[${ref}] generalHouseInfo preview:\n${rows[0].property_data.listingSubmission.generalHouseInfo}`);
 }
 
 main().catch((error) => {

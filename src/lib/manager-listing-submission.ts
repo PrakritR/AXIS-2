@@ -61,6 +61,10 @@ export type ManagerRoomSubmission = {
   moveInAvailableDate: string;
   /** Keys, parking, access, what to bring — shown to placed residents. Required for new listings. */
   moveInInstructions: string;
+  /** Move-in instruction photos (resident portal only — not on public listing). */
+  moveInPhotoDataUrls: string[];
+  /** Optional move-in walkthrough video (resident portal only). */
+  moveInVideoDataUrl: string | null;
   /** Manager-defined blocks when the room must not be booked (overlaps disallowed with applicant lease). */
   manualUnavailableRanges: ManagerRoomUnavailableRange[];
   detail: string;
@@ -295,6 +299,10 @@ export type ManagerListingSubmissionV1 = {
   houseMoveInAvailableDate?: string;
   /** Move-in instructions for entire-home listings (keys, parking, access). */
   houseMoveInInstructions?: string;
+  /** Move-in instruction photos for entire-home listings (resident portal only). */
+  houseMoveInPhotoDataUrls?: string[];
+  /** Optional move-in walkthrough video for entire-home listings (resident portal only). */
+  houseMoveInVideoDataUrl?: string | null;
   /** General house photos (common areas, exterior, kitchen) shown at the top of the public listing. */
   housePhotoDataUrls: string[];
   /**
@@ -1075,6 +1083,15 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
         typeof (legacyRoom as ManagerRoomSubmission & { moveInInstructions?: unknown }).moveInInstructions === "string"
           ? (legacyRoom as ManagerRoomSubmission & { moveInInstructions: string }).moveInInstructions.trim()
           : "",
+      moveInPhotoDataUrls:
+        Array.isArray((legacyRoom as ManagerRoomSubmission & { moveInPhotoDataUrls?: unknown }).moveInPhotoDataUrls)
+          ? ((legacyRoom as ManagerRoomSubmission & { moveInPhotoDataUrls?: unknown }).moveInPhotoDataUrls as unknown[])
+              .filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+          : [],
+      moveInVideoDataUrl:
+        typeof (legacyRoom as ManagerRoomSubmission & { moveInVideoDataUrl?: unknown }).moveInVideoDataUrl === "string"
+          ? (legacyRoom as ManagerRoomSubmission & { moveInVideoDataUrl: string }).moveInVideoDataUrl || null
+          : null,
       prorateMethod: (legacyRoom.prorateMethod === "daily_rate" ? "daily_rate" : "auto") as "auto" | "daily_rate",
       // Prorated per-day rent and per-day utilities are SEPARATE again (the earlier all-in
       // fold was reversed). Each is read straight from storage; charge generation reads a
@@ -1454,6 +1471,12 @@ export function normalizeManagerListingSubmissionV1(sub: ManagerListingSubmissio
       typeof sub.houseMoveInAvailableDate === "string" ? sub.houseMoveInAvailableDate.trim() : "",
     houseMoveInInstructions:
       typeof sub.houseMoveInInstructions === "string" ? sub.houseMoveInInstructions.trim() : "",
+    houseMoveInPhotoDataUrls:
+      Array.isArray(sub.houseMoveInPhotoDataUrls)
+        ? sub.houseMoveInPhotoDataUrls.filter((u): u is string => typeof u === "string" && u.trim().length > 0)
+        : [],
+    houseMoveInVideoDataUrl:
+      typeof sub.houseMoveInVideoDataUrl === "string" ? sub.houseMoveInVideoDataUrl || null : null,
     shortTermRentalsAllowed: Boolean(sub.shortTermRentalsAllowed),
     shortTermRequirements: typeof sub.shortTermRequirements === "string" ? sub.shortTermRequirements : "",
     shortTermDailyCost: typeof sub.shortTermDailyCost === "string" ? sub.shortTermDailyCost : "",
@@ -1632,6 +1655,8 @@ export function emptyRoom(index: number): ManagerRoomSubmission {
     availability: "Available now",
     moveInAvailableDate: "",
     moveInInstructions: "",
+    moveInPhotoDataUrls: [],
+    moveInVideoDataUrl: null,
     manualUnavailableRanges: [],
     detail: "",
     furnishing: "",
@@ -1694,6 +1719,8 @@ export function duplicateRoomEntry(source: ManagerRoomSubmission): ManagerRoomSu
     name: source.name.trim() ? `${source.name.trim()} (copy)` : "Room (copy)",
     photoDataUrls: [...source.photoDataUrls],
     videoDataUrl: source.videoDataUrl,
+    moveInPhotoDataUrls: [...(source.moveInPhotoDataUrls ?? [])],
+    moveInVideoDataUrl: source.moveInVideoDataUrl ?? null,
     utilitiesEstimate: source.utilitiesEstimate ?? "",
     furnishing: source.furnishing ?? "",
     roomAmenitiesText: source.roomAmenitiesText ?? "",
@@ -2008,6 +2035,8 @@ export function createDefaultListingSubmission(): ManagerListingSubmissionV1 {
     applicationFeeOtherInstructions: "",
     houseMoveInAvailableDate: "",
     houseMoveInInstructions: "",
+    houseMoveInPhotoDataUrls: [],
+    houseMoveInVideoDataUrl: null,
     rentDueDayMode: "first_of_month",
     lateFeeEnabled: true,
     lateFeeGraceDays: 5,
