@@ -7,6 +7,11 @@ import { Modal, MODAL_FIELD_LABEL_CLASS, ModalFooter } from "@/components/ui/mod
 import { useAppUi } from "@/components/providers/app-ui-provider";
 import { useNativeCamera } from "@/lib/native/use-native-camera";
 import type { ManagerDocumentDTO } from "@/lib/documents/manager-documents";
+import {
+  PORTAL_LIST_ADD_ICONS,
+  PORTAL_LIST_ADD_ROW_WRAP_CLASS,
+  PortalListAddRow,
+} from "@/components/portal/portal-list-add-row";
 import { PORTAL_DATA_TABLE, PORTAL_DATA_TABLE_SCROLL,
   PORTAL_DATA_TABLE_WRAP,
   PORTAL_TABLE_DETAIL_CELL,
@@ -443,12 +448,14 @@ export function ResidentOtherDocumentsTable({
   uploads,
   loading,
   onRemove,
+  onAdd,
   demo = false,
-  emptyMessage = "No documents yet. Use Add above to upload one. Anything your manager shares with you will appear here too.",
+  emptyMessage = "No documents yet. Add one below, or wait for your manager to share files with you.",
 }: {
   uploads: UploadedOwnLease[];
   loading: boolean;
   onRemove: (id: string) => void;
+  onAdd?: () => void;
   demo?: boolean;
   emptyMessage?: string;
 }) {
@@ -548,7 +555,21 @@ export function ResidentOtherDocumentsTable({
         </div>
       );
     }
-    return <PortalDataTableEmpty icon="default" message={emptyMessage} />;
+    return (
+      <>
+        <PortalDataTableEmpty icon="default" message={emptyMessage} />
+        {onAdd ? (
+          <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+            <PortalListAddRow
+              label="Add document"
+              icon={PORTAL_LIST_ADD_ICONS.lease}
+              onClick={onAdd}
+              dataAttr="resident-documents-add"
+            />
+          </div>
+        ) : null}
+      </>
+    );
   }
 
   const sourceBadge = (row: CombinedDocRow) =>
@@ -683,6 +704,16 @@ export function ResidentOtherDocumentsTable({
           </table>
         </div>
       </div>
+      {onAdd ? (
+        <div className={PORTAL_LIST_ADD_ROW_WRAP_CLASS}>
+          <PortalListAddRow
+            label="Add document"
+            icon={PORTAL_LIST_ADD_ICONS.lease}
+            onClick={onAdd}
+            dataAttr="resident-documents-add"
+          />
+        </div>
+      ) : null}
     </>
   );
 }

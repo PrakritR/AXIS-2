@@ -4,12 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   MANAGER_TABLE_TH,
   ManagerPortalPageShell,
-  PORTAL_HEADER_ACTION_BTN,
 } from "@/components/portal/portal-metrics";
 import { PortalListControlStack } from "@/components/portal/portal-list-control-stack";
-import { PortalSectionActionRow } from "@/components/portal/portal-section-action-row";
-import { Button } from "@/components/ui/button";
-import { ReportExportButtons } from "@/components/portal/reports/report-filter-bar";
 import { ReportGeneratePrompt } from "@/components/portal/reports/report-generate-prompt";
 import {
   PORTAL_TABLE_TD,
@@ -18,9 +14,10 @@ import {
 } from "@/components/portal/portal-data-table";
 import { DocumentsTableShell } from "@/components/portal/documents-table-shell";
 import {
-  openDocumentInNewTab,
+  DocumentInlineViewer,
   ResidentAddDocumentModal,
   ResidentOtherDocumentsTable,
+  triggerDocumentDownload,
 } from "@/components/portal/resident-other-documents";
 import { ApplicationDocumentPreview } from "@/components/portal/manager-applications";
 import { PortalRecordDetailPage } from "@/components/portal/portal-record-detail-page";
@@ -33,6 +30,10 @@ import { usePortalNavigate } from "@/lib/portal-nav-client";
 import {
   residentDocumentsApplicationDetailHref,
   residentDocumentsApplicationListHref,
+  residentDocumentsLeaseDetailHref,
+  residentDocumentsLeaseListHref,
+  residentDocumentsReceiptDetailHref,
+  residentDocumentsReceiptsListHref,
 } from "@/lib/portal-detail-routes";
 import {
   MANAGER_APPLICATIONS_EVENT,
@@ -48,6 +49,7 @@ import { residentOwnsApplicationRow } from "@/lib/rental-application/resident-ap
 import type { DemoApplicantRow, ManagerApplicationBucket } from "@/data/demo-portal";
 import {
   LEASE_PIPELINE_EVENT,
+  runLeaseDownload,
   findLeaseForResidentEmail,
   getLeaseDocumentHtml,
   hasBothLeaseSignatures,
@@ -222,6 +224,7 @@ function ResidentApplicationDocumentDetail({
           row={row}
           collapsible={false}
           showDownload
+          downloadLabel="Download application"
           variant="pdf"
           downloadPlacement="bottom"
           bareCanvas
@@ -231,190 +234,19 @@ function ResidentApplicationDocumentDetail({
   );
 }
 
-/** Documents › Rent receipts — one row per recorded payment; tap opens the receipt in a new tab. */
-function RentReceiptsTab() {
-  const { showToast } = useAppUi();
-  const session = usePortalSession();
-  const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [generated, setGenerated] = useState(false);
-  const [range, setRange] = useState(() => residentLedgerReceiptRange());
-  // Demo sandbox: no authenticated ledger API — derive receipt rows from the
-  // seeded local charges and build receipt PDFs in the browser.
-  const demoMode = isDemoModeActive();
-  const demoPdfCache = useRef(new Map<string, string>());
-  const sessionEmail = session.email?.trim().toLowerCase() ?? "";
-  const sessionUserId = session.userId ?? null;
-
-  const loadReceipts = useCallback(async (from: string, to: string) => {
-    if (demoMode) {
-      const rows = readChargesForResident(sessionEmail, sessionUserId)
-        .filter((charge) => charge.status === "paid" && charge.paidAt)
-        .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
-        .map((charge) => ({
-          date: String(charge.paidAt).slice(0, 10),
-          description: `${charge.title} · ${charge.propertyLabel}`,
-          payment: charge.amountLabel,
-        }));
-      setLedgerReport({ id: "resident-ledger", title: "Resident ledger", columns: [], rows });
-      setGenerated(true);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const params = new URLSearchParams({ from, to });
-      const res = await fetch(`/api/reports/resident-ledger?${params}`);
-      const data = await res.json();
-      if (res.ok) {
-        setLedgerReport(data as ReportResult);
-        setGenerated(true);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [demoMode, sessionEmail, sessionUserId]);
-
-  useEffect(() => {
-    void loadReceipts(range.from, range.to);
-  }, [range.from, range.to, loadReceipts]);
-
-  const receipts = useMemo<ReceiptRow[]>(
-    () => buildReceiptRows(ledgerReport?.rows ?? []),
-    [ledgerReport],
-  );
-
-  const ledgerQuery = new URLSearchParams({ from: range.from, to: range.to }).toString();
-
-  const buildDemoReceipt = useCallback(async (row: ReceiptRow): Promise<string> => {
-    const key = `${row.date}:${row.amount}`;
-    const cached = demoPdfCache.current.get(key);
-    if (cached) return cached;
-    const { buildDemoReceiptPdfDataUrl } = await import("@/lib/demo/demo-document-files");
-    const url = await buildDemoReceiptPdfDataUrl({
-      residentName: DEMO_RESIDENT_NAME,
-      description: row.description,
-      amountLabel: row.amount,
-      dateLabel: row.date,
-    });
-    demoPdfCache.current.set(key, url);
-    return url;
-  }, []);
-
-  const openReceipt = useCallback(
-    (row: ReceiptRow) => {
-      if (demoMode) {
-        void buildDemoReceipt(row).then((url) => {
-          if (!openDocumentInNewTab({ src: url })) {
-            showToast("Could not open a new tab. Allow pop-ups for this site and try again.");
-          }
-        });
-        return;
-      }
-      if (
-        !openDocumentInNewTab({
-          srcDoc: buildRentReceiptHtml({
-            residentName: sessionEmail || undefined,
-            description: row.description,
-            amountLabel: row.amount,
-            dateLabel: row.date,
-          }),
-        })
-      ) {
-        showToast("Could not open a new tab. Allow pop-ups for this site and try again.");
-      }
-    },
-    [demoMode, buildDemoReceipt, sessionEmail, showToast],
-  );
-
-  return (
-    <>
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div className="flex flex-wrap gap-3">
-            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-              From
-              <input
-                type="date"
-               
-                value={range.from}
-                onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
-              />
-            </label>
-            <label className="flex flex-col gap-1 text-xs font-medium text-muted">
-              To
-              <input
-                type="date"
-               
-                value={range.to}
-                onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
-              />
-            </label>
-          </div>
-          {generated && receipts.length > 0 && !demoMode ? (
-            <ReportExportButtons reportId="resident-ledger" query={ledgerQuery} />
-          ) : null}
-        </div>
-        {loading && !generated ? (
-          <ReportGeneratePrompt loading loadingTitle="Loading rent receipts…" />
-        ) : receipts.length === 0 ? (
-          <PortalDataTableEmpty icon="default" message="No rent receipts in this date range yet." />
-        ) : (
-          <DocumentsTableShell
-      hideColumnHeaders
-            colSpan={3}
-            head={
-              <>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
-                <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
-              </>
-            }
-            rows={receipts.map((row) => ({
-              key: row.id,
-              expanded: false,
-              detail: null,
-              onToggle: () => openReceipt(row),
-              cells: (
-                <>
-                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
-                    <span className="min-w-0 truncate font-medium text-foreground">
-                      {receiptRowLabel(row.description)}
-                    </span>
-                  </td>
-                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
-                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
-                </>
-              ),
-              card: (
-                <PortalMobileSummaryCard
-                  title={receiptRowLabel(row.description)}
-                  subtitle={row.amount}
-                  meta={row.date}
-                  onClick={() => openReceipt(row)}
-                />
-              ),
-            }))}
-          />
-        )}
-      </div>
-    </>
-  );
+function receiptPdfHref(date: string): string {
+  const params = new URLSearchParams({ from: date, to: date, format: "pdf" });
+  return `/api/reports/resident-ledger/export?${params.toString()}`;
 }
 
-/**
- * Documents › Lease — read-only: the fully signed lease as a downloadable
- * document. Signing, feedback, and uploads live in the standalone Lease tab;
- * none of that is offered here.
- */
-function SignedLeaseDocumentsTable() {
-  const { showToast } = useAppUi();
+function useResidentSignedLeaseRow(): LeasePipelineRow | null {
   const session = usePortalSession();
   const email = session.email?.trim() ?? "";
   const [tick, setTick] = useState(0);
   const [residentAxisId, setResidentAxisId] = useState("");
   const [profileManagerId, setProfileManagerId] = useState<string | null>(null);
   const [axisResolved, setAxisResolved] = useState(false);
+
   useEffect(() => {
     if (!session.userId) {
       queueMicrotask(() => setAxisResolved(true));
@@ -477,20 +309,39 @@ function SignedLeaseDocumentsTable() {
     };
   }, []);
 
-  const row = useMemo<LeasePipelineRow | null>(() => {
+  return useMemo<LeasePipelineRow | null>(() => {
     void tick;
     if (!email || !axisResolved) return null;
-    return findLeaseForResidentEmail(email, {
+    const row = findLeaseForResidentEmail(email, {
       email,
       residentAxisId,
       profileManagerId,
     });
+    return row && hasBothLeaseSignatures(row) ? row : null;
   }, [axisResolved, email, profileManagerId, residentAxisId, tick]);
+}
 
-  const fullySigned = Boolean(row && hasBothLeaseSignatures(row));
+function ResidentLeaseDocumentDetail({ leaseId, basePath }: { leaseId: string; basePath: string }) {
+  const { showToast } = useAppUi();
+  const row = useResidentSignedLeaseRow();
+  const listHref = residentDocumentsLeaseListHref(basePath);
 
-  if (!row || !fullySigned) {
-    return <PortalDataTableEmpty icon="lease" message="Your signed lease will appear here once it's signed." />;
+  if (!row || row.id !== leaseId) {
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Documents"
+        title="Lease"
+        backHref={listHref}
+        hideBackText
+        bareHeader
+        dataAttrBack="resident-documents-lease-detail-back"
+        pinScrollBody
+      >
+        <div className="px-3 py-6">
+          <PortalDataTableEmpty icon="lease" message="Lease document not found." />
+        </div>
+      </PortalRecordDetailPage>
+    );
   }
 
   const pdfSrc = row.managerUploadedPdf?.dataUrl ?? null;
@@ -498,11 +349,316 @@ function SignedLeaseDocumentsTable() {
   const signedAt = row.fullySignedAt ?? row.updatedAtIso;
   const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
 
-  const openLease = () => {
-    if (!openDocumentInNewTab({ src: pdfSrc, srcDoc: leaseHtml })) {
-      showToast("Could not open a new tab. Allow pop-ups for this site and try again.");
+  return (
+    <PortalRecordDetailPage
+      pageTitle="Documents"
+      title={leaseName}
+      subtitle={`Fully signed · ${safeFormatDateTime(signedAt)}`}
+      backHref={listHref}
+      hideBackText
+      bareHeader
+      dataAttrBack="resident-documents-lease-detail-back"
+      pinScrollBody
+    >
+      <div className="px-3 pb-6 pt-2 sm:px-4">
+        <DocumentInlineViewer
+          embedded
+          actionsPlacement="bottom"
+          title={leaseName}
+          src={pdfSrc}
+          srcDoc={leaseHtml}
+          onDownload={() => runLeaseDownload(row, showToast)}
+          downloadLabel={pdfSrc ? "Download lease" : "Download / print lease"}
+          downloadAttr="resident-documents-lease-download-pdf"
+        />
+      </div>
+    </PortalRecordDetailPage>
+  );
+}
+
+function ResidentReceiptDocumentDetail({ receiptId, basePath }: { receiptId: string; basePath: string }) {
+  const session = usePortalSession();
+  const demoMode = isDemoModeActive();
+  const demoPdfCache = useRef(new Map<string, string>());
+  const sessionEmail = session.email?.trim().toLowerCase() ?? "";
+  const sessionUserId = session.userId ?? null;
+  const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [range] = useState(() => residentLedgerReceiptRange());
+  const listHref = residentDocumentsReceiptsListHref(basePath);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (demoMode) {
+      const rows = readChargesForResident(sessionEmail, sessionUserId)
+        .filter((charge) => charge.status === "paid" && charge.paidAt)
+        .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
+        .map((charge) => ({
+          date: String(charge.paidAt).slice(0, 10),
+          description: `${charge.title} · ${charge.propertyLabel}`,
+          payment: charge.amountLabel,
+        }));
+      setLedgerReport({ id: "resident-ledger", title: "Resident ledger", columns: [], rows });
+      setLoading(false);
+      return;
     }
-  };
+    setLoading(true);
+    void (async () => {
+      try {
+        const params = new URLSearchParams({ from: range.from, to: range.to });
+        const res = await fetch(`/api/reports/resident-ledger?${params}`);
+        const data = await res.json();
+        if (!cancelled && res.ok) setLedgerReport(data as ReportResult);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [demoMode, range.from, range.to, sessionEmail, sessionUserId]);
+
+  const receipt = useMemo(
+    () => buildReceiptRows(ledgerReport?.rows ?? []).find((row) => row.id === receiptId) ?? null,
+    [ledgerReport, receiptId],
+  );
+
+  const buildDemoReceipt = useCallback(async (row: ReceiptRow): Promise<string> => {
+    const key = `${row.date}:${row.amount}`;
+    const cached = demoPdfCache.current.get(key);
+    if (cached) return cached;
+    const { buildDemoReceiptPdfDataUrl } = await import("@/lib/demo/demo-document-files");
+    const url = await buildDemoReceiptPdfDataUrl({
+      residentName: DEMO_RESIDENT_NAME,
+      description: row.description,
+      amountLabel: row.amount,
+      dateLabel: row.date,
+    });
+    demoPdfCache.current.set(key, url);
+    return url;
+  }, []);
+
+  const downloadReceipt = useCallback(
+    (row: ReceiptRow) => {
+      if (demoMode) {
+        void buildDemoReceipt(row).then((url) => triggerDocumentDownload(url, `payment-receipt-${row.date}.pdf`));
+        return;
+      }
+      triggerDocumentDownload(receiptPdfHref(row.date), `payment-receipt-${row.date}.pdf`);
+    },
+    [demoMode, buildDemoReceipt],
+  );
+
+  if (loading) {
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Documents"
+        title="Rent receipt"
+        backHref={listHref}
+        hideBackText
+        bareHeader
+        dataAttrBack="resident-documents-receipt-detail-back"
+        pinScrollBody
+      >
+        <div className="px-3 py-6">
+          <ReportGeneratePrompt loading loadingTitle="Loading receipt…" />
+        </div>
+      </PortalRecordDetailPage>
+    );
+  }
+
+  if (!receipt) {
+    return (
+      <PortalRecordDetailPage
+        pageTitle="Documents"
+        title="Rent receipt"
+        backHref={listHref}
+        hideBackText
+        bareHeader
+        dataAttrBack="resident-documents-receipt-detail-back"
+        pinScrollBody
+      >
+        <div className="px-3 py-6">
+          <PortalDataTableEmpty icon="default" message="Receipt not found." />
+        </div>
+      </PortalRecordDetailPage>
+    );
+  }
+
+  const title = receiptRowLabel(receipt.description);
+
+  return (
+    <PortalRecordDetailPage
+      pageTitle="Documents"
+      title={title}
+      subtitle={`${receipt.amount} · ${receipt.date}`}
+      backHref={listHref}
+      hideBackText
+      bareHeader
+      dataAttrBack="resident-documents-receipt-detail-back"
+      pinScrollBody
+    >
+      <div className="px-3 pb-6 pt-2 sm:px-4">
+        <DocumentInlineViewer
+          embedded
+          actionsPlacement="bottom"
+          title={`${title} ${receipt.date}`}
+          srcDoc={buildRentReceiptHtml({
+            residentName: demoMode ? DEMO_RESIDENT_NAME : sessionEmail || undefined,
+            description: receipt.description,
+            amountLabel: receipt.amount,
+            dateLabel: receipt.date,
+          })}
+          onDownload={() => downloadReceipt(receipt)}
+          downloadLabel="Download receipt"
+          downloadAttr="resident-documents-receipt-download"
+        />
+      </div>
+    </PortalRecordDetailPage>
+  );
+}
+
+/** Documents › Rent receipts — one row per recorded payment; tap opens a detail page with download. */
+function RentReceiptsTab({ basePath }: { basePath: string }) {
+  const session = usePortalSession();
+  const navigate = usePortalNavigate();
+  const [ledgerReport, setLedgerReport] = useState<ReportResult | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [generated, setGenerated] = useState(false);
+  const [range, setRange] = useState(() => residentLedgerReceiptRange());
+  const demoMode = isDemoModeActive();
+  const sessionEmail = session.email?.trim().toLowerCase() ?? "";
+  const sessionUserId = session.userId ?? null;
+
+  const loadReceipts = useCallback(async (from: string, to: string) => {
+    if (demoMode) {
+      const rows = readChargesForResident(sessionEmail, sessionUserId)
+        .filter((charge) => charge.status === "paid" && charge.paidAt)
+        .sort((a, b) => String(b.paidAt).localeCompare(String(a.paidAt)))
+        .map((charge) => ({
+          date: String(charge.paidAt).slice(0, 10),
+          description: `${charge.title} · ${charge.propertyLabel}`,
+          payment: charge.amountLabel,
+        }));
+      setLedgerReport({ id: "resident-ledger", title: "Resident ledger", columns: [], rows });
+      setGenerated(true);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    try {
+      const params = new URLSearchParams({ from, to });
+      const res = await fetch(`/api/reports/resident-ledger?${params}`);
+      const data = await res.json();
+      if (res.ok) {
+        setLedgerReport(data as ReportResult);
+        setGenerated(true);
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [demoMode, sessionEmail, sessionUserId]);
+
+  useEffect(() => {
+    void loadReceipts(range.from, range.to);
+  }, [range.from, range.to, loadReceipts]);
+
+  const receipts = useMemo<ReceiptRow[]>(
+    () => buildReceiptRows(ledgerReport?.rows ?? []),
+    [ledgerReport],
+  );
+
+  const openReceipt = useCallback(
+    (row: ReceiptRow) => {
+      navigate(residentDocumentsReceiptDetailHref(basePath, row.id));
+    },
+    [basePath, navigate],
+  );
+
+  return (
+    <>
+      <div className="space-y-4">
+        <div className="flex flex-wrap gap-3">
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            From
+            <input
+              type="date"
+              value={range.from}
+              onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+            />
+          </label>
+          <label className="flex flex-col gap-1 text-xs font-medium text-muted">
+            To
+            <input
+              type="date"
+              value={range.to}
+              onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+            />
+          </label>
+        </div>
+        {loading && !generated ? (
+          <ReportGeneratePrompt loading loadingTitle="Loading rent receipts…" />
+        ) : receipts.length === 0 ? (
+          <PortalDataTableEmpty icon="default" message="No rent receipts in this date range yet." />
+        ) : (
+          <DocumentsTableShell
+            hideColumnHeaders
+            colSpan={3}
+            head={
+              <>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Name</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Amount</th>
+                <th className={`${MANAGER_TABLE_TH} text-left`}>Date</th>
+              </>
+            }
+            rows={receipts.map((row) => ({
+              key: row.id,
+              expanded: false,
+              detail: null,
+              onToggle: () => openReceipt(row),
+              cells: (
+                <>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>
+                    <span className="min-w-0 truncate font-medium text-foreground">
+                      {receiptRowLabel(row.description)}
+                    </span>
+                  </td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.amount}</td>
+                  <td className={`${PORTAL_TABLE_TD} align-middle`}>{row.date}</td>
+                </>
+              ),
+              card: (
+                <PortalMobileSummaryCard
+                  title={receiptRowLabel(row.description)}
+                  subtitle={row.amount}
+                  meta={row.date}
+                  onClick={() => openReceipt(row)}
+                />
+              ),
+            }))}
+          />
+        )}
+      </div>
+    </>
+  );
+}
+
+/**
+ * Documents › Lease — read-only: the fully signed lease as a downloadable
+ * document. Signing, feedback, and uploads live in the standalone Lease tab;
+ * none of that is offered here.
+ */
+function SignedLeaseDocumentsTable({ basePath }: { basePath: string }) {
+  const navigate = usePortalNavigate();
+  const row = useResidentSignedLeaseRow();
+
+  if (!row) {
+    return <PortalDataTableEmpty icon="lease" message="Your signed lease will appear here once it's signed." />;
+  }
+
+  const signedAt = row.fullySignedAt ?? row.updatedAtIso;
+  const leaseName = `Signed lease${row.unit ? ` · ${row.unit}` : ""}`;
+  const openLease = () => navigate(residentDocumentsLeaseDetailHref(basePath, row.id));
 
   return (
     <DocumentsTableShell
@@ -549,11 +705,15 @@ export function ResidentDocumentsPanel({
   basePath = "/resident",
   tabs,
   applicationId,
+  leaseId,
+  receiptId,
 }: {
   tabId: string;
   basePath?: string;
   tabs: ReadonlyArray<{ id: string; label: string }>;
   applicationId?: string;
+  leaseId?: string;
+  receiptId?: string;
 }) {
   const { showToast } = useAppUi();
   const session = usePortalSession();
@@ -614,36 +774,16 @@ export function ResidentDocumentsPanel({
     );
   }
 
+  if (tabId === "lease" && leaseId) {
+    return <ResidentLeaseDocumentDetail leaseId={leaseId} basePath={basePath} />;
+  }
+
+  if (tabId === "receipts" && receiptId) {
+    return <ResidentReceiptDocumentDetail receiptId={receiptId} basePath={basePath} />;
+  }
+
   return (
-    <ManagerPortalPageShell
-      title="Documents"
-      hideTitleOnMobileNav
-      titleAside={
-        <PortalSectionActionRow variant="header" className="hidden gap-2 md:flex">
-          <Button
-            type="button"
-            variant="outline"
-            className={PORTAL_HEADER_ACTION_BTN}
-            data-attr="resident-documents-add"
-            onClick={openAdd}
-          >
-            Add
-          </Button>
-        </PortalSectionActionRow>
-      }
-      compactFilterRow
-    >
-      <div className="mb-3 md:hidden [&_button]:w-full" data-slot="resident-documents-mobile-actions">
-        <Button
-          type="button"
-          variant="outline"
-          className={`w-full ${PORTAL_HEADER_ACTION_BTN}`}
-          data-attr="resident-documents-add"
-          onClick={openAdd}
-        >
-          Add
-        </Button>
-      </div>
+    <ManagerPortalPageShell title="Documents" hideTitleOnMobileNav compactFilterRow>
       <PortalListControlStack
         className="mb-3 max-lg:mb-4"
         destinationInset
@@ -658,26 +798,28 @@ export function ResidentDocumentsPanel({
       />
       {tabId === "application" ? <ApplicationDocumentsTable basePath={basePath} /> : null}
 
-      {tabId === "lease" ? <SignedLeaseDocumentsTable /> : null}
+      {tabId === "lease" ? <SignedLeaseDocumentsTable basePath={basePath} /> : null}
 
-      {tabId === "receipts" ? <RentReceiptsTab /> : null}
+      {tabId === "receipts" ? <RentReceiptsTab basePath={basePath} /> : null}
 
       {tabId === "other" ? (
-        <ResidentOtherDocumentsTable
-          uploads={uploads}
-          loading={uploadsLoading}
-          onRemove={onRemoveUpload}
-          demo={isDemoModeActive()}
-        />
+        <>
+          <ResidentOtherDocumentsTable
+            uploads={uploads}
+            loading={uploadsLoading}
+            onRemove={onRemoveUpload}
+            demo={isDemoModeActive()}
+            onAdd={openAdd}
+          />
+          <ResidentAddDocumentModal
+            key={addOpen ? "open" : "closed"}
+            open={addOpen}
+            email={email}
+            onClose={() => setAddOpen(false)}
+            onAdded={onDocumentAdded}
+          />
+        </>
       ) : null}
-
-      <ResidentAddDocumentModal
-        key={addOpen ? "open" : "closed"}
-        open={addOpen}
-        email={email}
-        onClose={() => setAddOpen(false)}
-        onAdded={onDocumentAdded}
-      />
     </ManagerPortalPageShell>
   );
 }

@@ -997,11 +997,19 @@ export async function renderPortalSection(
     // "Shared with you" was merged into "Other documents" — keep old deep links alive.
     if (docTab === "shared") redirect(`${def.basePath}/${section}/other`);
     if (!allowedTabs.includes(docTab)) notFound();
-    const applicationId =
-      docTab === "application" && tabParts.length === 2
-        ? decodeURIComponent(tabParts[1]!)
-        : undefined;
-    if (tabParts.length === 2 && docTab !== "application") notFound();
+    const detailId =
+      tabParts.length === 2 ? decodeURIComponent(tabParts[1]!) : undefined;
+    if (
+      tabParts.length === 2 &&
+      docTab !== "application" &&
+      docTab !== "lease" &&
+      docTab !== "receipts"
+    ) {
+      notFound();
+    }
+    const applicationId = docTab === "application" ? detailId : undefined;
+    const leaseId = docTab === "lease" ? detailId : undefined;
+    const receiptId = docTab === "receipts" ? detailId : undefined;
     const tierGate = residentManagerTierGate("documents", residentManagerTier, meta.label);
     if (tierGate) return tierGate;
     return (
@@ -1010,6 +1018,8 @@ export async function renderPortalSection(
         basePath={def.basePath}
         tabs={meta.tabs}
         applicationId={applicationId}
+        leaseId={leaseId}
+        receiptId={receiptId}
       />
     );
   }

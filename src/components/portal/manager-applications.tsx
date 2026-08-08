@@ -264,6 +264,7 @@ export function ApplicationDocumentPreview({
   row,
   collapsible = true,
   showDownload = true,
+  downloadLabel = "Download PDF",
   bareCanvas = false,
   variant = "html",
   downloadPlacement = "bottom",
@@ -271,6 +272,7 @@ export function ApplicationDocumentPreview({
   row: DemoApplicantRow;
   collapsible?: boolean;
   showDownload?: boolean;
+  downloadLabel?: string;
   /** Flat on the portal page canvas — no white document card chrome. */
   bareCanvas?: boolean;
   /** `pdf` renders the server-built application PDF; `html` uses saved answers. */
@@ -350,7 +352,7 @@ export function ApplicationDocumentPreview({
   );
 
   const downloadButton = showDownload ? (
-    <ApplicationPdfDownloadButton row={row} />
+    <ApplicationPdfDownloadButton row={row} label={downloadLabel} />
   ) : null;
 
   const downloadActions =
