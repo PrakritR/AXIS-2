@@ -182,6 +182,40 @@ const SHORT_TERM_OMITTED_STANDARD_LABELS = new Set<string>([
   "consent:Credit & background check consent",
 ]);
 
+/**
+ * Built-in questions enabled on a new long-term application. Everything else stays
+ * off until the manager adds it via + Add question — same pattern as listing fees.
+ */
+export const LONG_TERM_DEFAULT_ENABLED_STANDARD_LABELS = [
+  "household:Group application",
+  "property:Property",
+  "property:Lease term",
+  "property:Lease start & end dates",
+] as const;
+
+function catalogKeyForLabel(section: RentalApplicationSectionId, label: string): string {
+  const def = STANDARD_APPLICATION_FIELD_CATALOG.find((d) => d.section === section && d.label === label);
+  if (!def) throw new Error(`Missing catalog field ${section}:${label}`);
+  return def.standardKey;
+}
+
+/** Built-in question keys enabled by default on an unconfigured long-term application. */
+export const LONG_TERM_DEFAULT_ENABLED_STANDARD_KEYS: readonly string[] =
+  LONG_TERM_DEFAULT_ENABLED_STANDARD_LABELS.map((key) => {
+    const [section, label] = key.split(":") as [RentalApplicationSectionId, string];
+    return catalogKeyForLabel(section, label);
+  });
+
+/** Built-in question keys disabled by default in an unconfigured long-term application. */
+export const LONG_TERM_DEFAULT_DISABLED_STANDARD_KEYS: readonly string[] =
+  STANDARD_APPLICATION_FIELD_CATALOG.filter(
+    (def) => !LONG_TERM_DEFAULT_ENABLED_STANDARD_KEYS.includes(def.standardKey),
+  ).map((def) => def.standardKey);
+
+export function defaultDisabledStandardApplicationKeysForNewListing(): string[] {
+  return [...LONG_TERM_DEFAULT_DISABLED_STANDARD_KEYS];
+}
+
 /** Built-in question keys disabled by default in an unconfigured short-term application. */
 export const SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS: readonly string[] =
   STANDARD_APPLICATION_FIELD_CATALOG.filter(
@@ -275,10 +309,20 @@ export function applicationConfigForVariant(
     };
   }
   if (variant !== "short_term") {
+    const storedDisabled = asStringArray(sub?.disabledStandardApplicationKeys);
+    const storedCustom = asCustomFields(sub?.customApplicationFields);
+    if (sub?.applicationConfigMode === "custom" || storedDisabled.length > 0 || storedCustom.length > 0) {
+      return {
+        disabledStandardApplicationKeys: storedDisabled,
+        customApplicationFields: storedCustom,
+        applicationConfigMode: asConfigMode(sub?.applicationConfigMode),
+      };
+    }
+    // Unconfigured long-term form → PropLane's curated four-question default.
     return {
-      disabledStandardApplicationKeys: asStringArray(sub?.disabledStandardApplicationKeys),
-      customApplicationFields: asCustomFields(sub?.customApplicationFields),
-      applicationConfigMode: asConfigMode(sub?.applicationConfigMode),
+      disabledStandardApplicationKeys: [...LONG_TERM_DEFAULT_DISABLED_STANDARD_KEYS],
+      customApplicationFields: [],
+      applicationConfigMode: "standard",
     };
   }
   if (sub?.shortTermApplicationConfigMode === "custom") {
@@ -429,10 +473,8 @@ export function resolveDisabledStandardApplicationFields(
   return STANDARD_APPLICATION_FIELD_CATALOG.filter((def) => disabled.has(def.standardKey)).map(defaultRowFromDef);
 }
 
-const CURATED_DEFAULT_DISABLED_BY_VARIANT: Record<
-  Extract<ApplicationFormVariant, "short_term" | "cosigner">,
-  ReadonlySet<string>
-> = {
+const CURATED_DEFAULT_DISABLED_BY_VARIANT: Record<ApplicationFormVariant, ReadonlySet<string>> = {
+  standard: new Set(LONG_TERM_DEFAULT_DISABLED_STANDARD_KEYS),
   short_term: new Set(SHORT_TERM_DEFAULT_DISABLED_STANDARD_KEYS),
   cosigner: new Set(COSIGNER_DEFAULT_DISABLED_STANDARD_KEYS),
 };
@@ -447,14 +489,11 @@ export function editorVisibleDisabledApplicationFields(
   slice: ApplicationConfigSlice,
 ): ResolvedApplicationField[] {
   const disabled = resolveDisabledStandardApplicationFields(slice);
-  if (slice.applicationConfigMode === "standard" && (variant === "short_term" || variant === "cosigner")) {
+  if (slice.applicationConfigMode === "standard") {
     return [];
   }
-  if (variant === "short_term" || variant === "cosigner") {
-    const baseline = CURATED_DEFAULT_DISABLED_BY_VARIANT[variant];
-    return disabled.filter((f) => f.standardKey && !baseline.has(f.standardKey));
-  }
-  return disabled;
+  const baseline = CURATED_DEFAULT_DISABLED_BY_VARIANT[variant];
+  return disabled.filter((f) => f.standardKey && !baseline.has(f.standardKey));
 }
 
 export function restoreDefaultApplicationConfig(): {
@@ -467,6 +506,28 @@ export function restoreDefaultApplicationConfig(): {
     customApplicationFields: [],
     applicationConfigMode: "standard",
   };
+}
+
+/** True when the long-term form still uses PropLane's curated default (not manager-edited). */
+export function listingApplicationUsesPropLaneDefaultQuestions(
+  sub:
+    | {
+        applicationConfigMode?: unknown;
+        disabledStandardApplicationKeys?: unknown;
+        customApplicationFields?: unknown;
+      }
+    | null
+    | undefined,
+): boolean {
+  if (!sub || sub.applicationConfigMode === "custom") return false;
+  if (Array.isArray(sub.customApplicationFields) && sub.customApplicationFields.length > 0) return false;
+  if (
+    Array.isArray(sub.disabledStandardApplicationKeys) &&
+    sub.disabledStandardApplicationKeys.some((k) => typeof k === "string" && k.trim().length > 0)
+  ) {
+    return false;
+  }
+  return true;
 }
 
 /** Custom application — all built-in questions on, no extra custom rows yet. */

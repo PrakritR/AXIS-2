@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createDefaultListingSubmission, normalizeCustomApplicationFields, normalizeCustomApplicationFieldsForEditor } from "@/lib/manager-listing-submission";
 import {
+  applicationConfigForVariant,
   isWizardFormFieldEnabled,
   listingDisabledWizardFormKeys,
   patchListingApplicationField,
@@ -55,10 +56,10 @@ describe("application-field-catalog", () => {
     };
     const restored = restoreDefaultApplicationConfig();
     const fields = resolveListingApplicationFields(
-      { ...sub, ...restored },
+      applicationConfigForVariant({ ...sub, ...restored }, "standard"),
       normalizeCustomApplicationFields,
     );
-    expect(fields).toHaveLength(STANDARD_APPLICATION_FIELD_CATALOG.length);
+    expect(fields).toHaveLength(4);
     expect(restored.customApplicationFields).toEqual([]);
   });
 

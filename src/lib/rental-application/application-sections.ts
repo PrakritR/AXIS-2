@@ -39,7 +39,7 @@ export const RENTAL_APPLICATION_SECTIONS: readonly RentalApplicationSection[] = 
     id: "household",
     title: "Household application",
     wizardStep: 1,
-    standardFields: ["Co-signer planned", "Group application"],
+    standardFields: ["Group application", "Co-signer planned"],
   },
   {
     id: "property",
