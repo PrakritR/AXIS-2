@@ -51,6 +51,7 @@ import { deliverResidentPropertyManagerChatMessage } from "@/lib/property-manage
 // route used to keep split the URL rather than `?path=`, so every recipient-side
 // attachment was labelled "inbox-attachments".
 import { attachmentMetaFromUrls as inboxAttachmentsFromUrls } from "@/lib/inbox-attachments";
+import { normalizeInboxAttachmentUrls } from "@/lib/inbox-attachments.server";
 
 export const runtime = "nodejs";
 

@@ -76,7 +76,7 @@ export async function POST(req: Request) {
       .select("email")
       .eq("id", managerUserId)
       .maybeSingle();
-    const managerEmail = textField(managerProfile as Record<string, unknown> | null, "email").toLowerCase();
+    const managerEmail = textField(managerProfile?.email).toLowerCase();
     const { data: residentProfile } = await db.from("profiles").select("id").eq("email", email).maybeSingle();
     const hasResidentAccount = Boolean(residentProfile?.id);
 

@@ -35,6 +35,10 @@ function resolveResidentReplyRecipientEmail(threadEmail: string, contacts: Inbox
   return manager?.email.trim().toLowerCase() ?? normalized;
 }
 import {
+  buildOptimisticSentThread,
+  markThreadMessageDelivery,
+} from "@/lib/inbox-message-timeline";
+import {
   PORTAL_INBOX_CHANGED_EVENT,
   type PersistedInboxThread,
   deleteInboxThreadIds,

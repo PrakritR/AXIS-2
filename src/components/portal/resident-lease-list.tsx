@@ -81,7 +81,13 @@ export function useResidentLeasePipelineRow(): LeasePipelineRow | null {
     void (async () => {
       const matchingApplication = readManagerApplicationRows()
         .filter((row) => row.email?.trim().toLowerCase() === email)
-        .sort((a, b) => (b.submittedAt ?? "").localeCompare(a.submittedAt ?? ""))[0];
+        .sort((a, b) => {
+          const aTs =
+            (a.application as { submittedAt?: string } | undefined)?.submittedAt?.trim() ?? "";
+          const bTs =
+            (b.application as { submittedAt?: string } | undefined)?.submittedAt?.trim() ?? "";
+          return bTs.localeCompare(aTs);
+        })[0];
 
       await syncManagerApplicationsFromServer({ selfScope: true }).catch(() => undefined);
 

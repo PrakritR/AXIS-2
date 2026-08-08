@@ -5,6 +5,10 @@
 import { resolveEmailLinkBaseUrl } from "@/lib/app-url";
 
 import { appendManagerPropertyLeadInboxMessage } from "@/lib/property-manager-inbox-thread.server";
+import {
+  resolveManagerRecipientProfiles,
+  resolvePropertyLeadRecipientIds,
+} from "@/lib/co-manager-notification-recipients.server";
 
 type Db = ReturnType<typeof import("@/lib/supabase/service").createSupabaseServiceRoleClient>;
 

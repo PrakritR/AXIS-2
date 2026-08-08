@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import type { Session } from "@supabase/supabase-js";
+import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { normalizePortalRoles } from "@/lib/auth/portal-roles";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 import { safeBrowserGetSession } from "@/lib/supabase/safe-browser-session";
@@ -64,7 +64,7 @@ export function useProspectContactAutofill(): ProspectContactAutofill {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: AuthChangeEvent, session: Session | null) => {
       void sync(session);
     });
 
