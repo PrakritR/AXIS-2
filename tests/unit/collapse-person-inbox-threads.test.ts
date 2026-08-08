@@ -37,7 +37,9 @@ describe("collapsePersonInboxThreads", () => {
 
     expect(rows).toHaveLength(1);
     expect(rows[0]!.id).toBe("payment_sent_mgr_2000_bbbb");
-    expect(inboxThreadMessages(rows[0]!).map((m) => m.body)).toEqual(["First reminder", "Second reminder"]);
+    const timeline = inboxThreadMessages(rows[0]!);
+    expect(timeline.map((m) => m.body)).toEqual(["First reminder", "Second reminder"]);
+    expect(new Set(timeline.map((m) => m.id)).size).toBe(timeline.length);
   });
 
   it("keeps separate threads for different residents", () => {
@@ -68,6 +70,37 @@ describe("collapsePersonInboxThreads", () => {
       { mergeFolders: true },
     );
     expect(rows).toHaveLength(1);
-    expect(inboxThreadMessages(rows[0]!).map((m) => m.body)).toEqual(["Reminder", "Thanks"]);
+    const timeline = inboxThreadMessages(rows[0]!);
+    expect(timeline.map((m) => m.body)).toEqual(["Reminder", "Thanks"]);
+    expect(new Set(timeline.map((m) => m.id)).size).toBe(timeline.length);
+  });
+
+  it("re-keys merged tour notification roots so React keys stay unique", () => {
+    const rows = collapsePersonInboxThreads(
+      [
+        thread({
+          id: "tour_inbox_1786191721716_46tz",
+          folder: "inbox",
+          email: "guest@example.com",
+          body: "Your tour request was received.",
+          from: "PropLane Tours",
+        }),
+        thread({
+          id: "tour_inbox_1786191721717_abcd",
+          folder: "inbox",
+          email: "guest@example.com",
+          body: "Your tour request was removed.",
+          from: "PropLane Tours",
+        }),
+      ],
+      { mergeFolders: true },
+    );
+    expect(rows).toHaveLength(1);
+    const timeline = inboxThreadMessages(rows[0]!);
+    expect(timeline.map((m) => m.body)).toEqual([
+      "Your tour request was received.",
+      "Your tour request was removed.",
+    ]);
+    expect(new Set(timeline.map((m) => m.id)).size).toBe(timeline.length);
   });
 });

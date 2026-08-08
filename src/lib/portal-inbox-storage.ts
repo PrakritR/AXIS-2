@@ -443,15 +443,19 @@ export function findCollapsedInboxThreadIdForEmail(
 }
 
 export function inboxThreadMessages(thread: PersistedInboxThread): InboxThreadMessage[] {
+  const rootId = `${thread.id}-root`;
   const root: InboxThreadMessage = {
-    id: `${thread.id}-root`,
+    id: rootId,
     from: thread.from,
     body: thread.body,
     at: thread.time,
     ...(thread.rootOutbound ? { outbound: true } : {}),
     ...(thread.attachments?.length ? { attachments: thread.attachments } : {}),
   };
-  return [root, ...(thread.messages ?? [])];
+  // Merged person-threads can carry a prior thread's synthetic root in `messages`;
+  // skip an exact id collision so the timeline never renders duplicate React keys.
+  const extras = (thread.messages ?? []).filter((m) => m.id !== rootId);
+  return [root, ...extras];
 }
 
 /**
@@ -573,13 +577,17 @@ export function collapsePersonInboxThreads(
       continue;
     }
     const last = ordered[ordered.length - 1]!;
+    const canonicalRootId = `${canonical.id}-root`;
+    const messages = ordered.slice(1).map((m) =>
+      m.id === canonicalRootId ? { ...m, id: `merged:${m.id}` } : m,
+    );
     merged.push({
       ...canonical,
       body: first.body,
       from: first.from,
       time: canonical.time,
       preview: last.body.slice(0, 100).replace(/\n/g, " "),
-      messages: ordered.slice(1),
+      messages,
       unread: group.some((t) => t.unread),
     });
   }
