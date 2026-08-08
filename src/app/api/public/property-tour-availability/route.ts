@@ -9,12 +9,11 @@ import { publicSchedulingHostLabel } from "@/lib/public-host-label";
 import { clientIpFrom, rateLimit } from "@/lib/rate-limit";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/service";
 import {
-  buildDefaultTourSlotKeys,
   DEFAULT_TOUR_HORIZON_DAYS,
   payloadSlots,
+  resolveTourOfferingSlots,
   rowPayload,
   safePropertyId,
-  shouldOfferDefaultTourGrid,
   slotBlocked,
   slotIsBookable,
   slotStartMs,
@@ -460,19 +459,19 @@ export async function GET(req: Request) {
       }))
       .filter((offering) => offering.managerUserId);
 
-    const publishedFutureSlots = publishedOfferings.flatMap((offering) =>
-      offering.slots.filter((slot) => slotIsBookable(slot)),
-    );
     const defaultGridManagerIds = [
       ...new Set(matchingPropertyRecords.map(({ managerUserId }) => managerUserId)),
     ].filter(Boolean);
-    const offerings: Offering[] = !shouldOfferDefaultTourGrid(publishedFutureSlots)
-      ? publishedOfferings
-      : defaultGridManagerIds.map((managerUserId) => ({
-          managerUserId,
-          propertyId: [...(propertyIdsByManager.get(managerUserId) ?? [])][0] ?? propertyId,
-          slots: buildDefaultTourSlotKeys(),
-        }));
+    const publishedSlotsByManager = new Map<string, string[]>();
+    for (const offering of publishedOfferings) {
+      const existing = publishedSlotsByManager.get(offering.managerUserId) ?? [];
+      publishedSlotsByManager.set(offering.managerUserId, [...existing, ...offering.slots]);
+    }
+    const offerings: Offering[] = defaultGridManagerIds.map((managerUserId) => ({
+      managerUserId,
+      propertyId: [...(propertyIdsByManager.get(managerUserId) ?? [])][0] ?? propertyId,
+      slots: resolveTourOfferingSlots(publishedSlotsByManager.get(managerUserId) ?? []),
+    }));
 
     const availabilityManagerIds = [...new Set(offerings.map((offering) => offering.managerUserId))];
     const blockedSlotsByManager = new Map<string, TourBlock[]>();

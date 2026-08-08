@@ -231,7 +231,18 @@ describe("public tour availability subtracts what is already taken", () => {
   it("offers published availability when nothing is taken", async () => {
     const slots = await offeredSlots();
     expect(slots.has(TEN_AM)).toBe(true);
-    expect(slots.size).toBe(4);
+    expect([...slots].filter((slot) => slot.startsWith(`${DAY}:`)).length).toBe(4);
+    expect(slots.size).toBeGreaterThan(4);
+  });
+
+  it("still offers the 9-5 default on other days when one day is published", async () => {
+    pinNow(Date.parse("2026-08-04T15:00:00.000Z"));
+    PROPERTY_AVAILABILITY_SLOTS = [TEN_AM];
+    const slots = await offeredSlots();
+    const days = new Set([...slots].map((slot) => slot.split(":")[0]));
+    expect(slots.has(TEN_AM)).toBe(true);
+    expect(days.size).toBeGreaterThan(1);
+    expect(slots.size).toBeGreaterThan(4);
   });
 
   it("offers a live property's global availability when it has published none of its own", async () => {
@@ -239,7 +250,8 @@ describe("public tour availability subtracts what is already taken", () => {
     GLOBAL_AVAILABILITY_SLOTS = [TEN_AM, `${DAY}:21`];
     const slots = await offeredSlots();
     expect(slots.has(TEN_AM)).toBe(true);
-    expect(slots.size).toBe(2);
+    expect([...slots].filter((slot) => slot.startsWith(`${DAY}:`)).length).toBe(2);
+    expect(slots.size).toBeGreaterThan(2);
   });
 
   it.each(["draft", "pending", "review", "unlisted"])(
@@ -338,7 +350,8 @@ describe("public tour availability subtracts what is already taken", () => {
       },
     ];
     const slots = await offeredSlots();
-    expect(slots.size).toBe(4);
+    expect([...slots].filter((slot) => slot.startsWith(`${DAY}:`)).length).toBe(4);
+    expect(slots.size).toBeGreaterThan(4);
   });
 
   it("ignores an invite the manager declined", async () => {
@@ -352,7 +365,8 @@ describe("public tour availability subtracts what is already taken", () => {
       },
     ];
     const slots = await offeredSlots();
-    expect(slots.size).toBe(4);
+    expect([...slots].filter((slot) => slot.startsWith(`${DAY}:`)).length).toBe(4);
+    expect(slots.size).toBeGreaterThan(4);
   });
 
   it("still blocks an all-day entry — a trip is exactly when a manager cannot host", async () => {
@@ -360,7 +374,8 @@ describe("public tour availability subtracts what is already taken", () => {
       { id: "g-allday", summary: "Out of town", start: `${DAY}T00:00:00`, end: `${DAY}T23:59:59`, allDay: true },
     ];
     const slots = await offeredSlots();
-    expect(slots.size).toBe(0);
+    expect([...slots].some((slot) => slot.startsWith(`${DAY}:`))).toBe(false);
+    expect(slots.size).toBeGreaterThan(0);
   });
 
   it("blocks an all-day entry even though Google reports it Free", async () => {
@@ -377,7 +392,8 @@ describe("public tour availability subtracts what is already taken", () => {
       },
     ];
     const slots = await offeredSlots();
-    expect(slots.size).toBe(0);
+    expect([...slots].some((slot) => slot.startsWith(`${DAY}:`))).toBe(false);
+    expect(slots.size).toBeGreaterThan(0);
   });
 
   it("does not block an all-day invite the manager declined", async () => {
@@ -392,7 +408,8 @@ describe("public tour availability subtracts what is already taken", () => {
       },
     ];
     const slots = await offeredSlots();
-    expect(slots.size).toBe(4);
+    expect([...slots].filter((slot) => slot.startsWith(`${DAY}:`)).length).toBe(4);
+    expect(slots.size).toBeGreaterThan(4);
   });
 
   it("reads busy time across the ENTIRE range it can offer, not the default horizon", async () => {
@@ -462,7 +479,8 @@ describe("public tour availability subtracts what is already taken", () => {
   it("still serves availability when the calendar link is broken", async () => {
     GOOGLE_THROWS = true;
     const slots = await offeredSlots();
-    expect(slots.size).toBe(4);
+    expect([...slots].filter((slot) => slot.startsWith(`${DAY}:`)).length).toBe(4);
+    expect(slots.size).toBeGreaterThan(4);
   });
 
   it("removes a slot a pending request already holds", async () => {

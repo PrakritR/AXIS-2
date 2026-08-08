@@ -19,6 +19,7 @@ import {
   DEFAULT_TOUR_HORIZON_DAYS,
   DEFAULT_TOUR_START_SLOT,
   overlaps,
+  resolveTourOfferingSlots,
   shouldOfferDefaultTourGrid,
   slotBlocked,
   slotIsBookable,
@@ -121,6 +122,30 @@ describe("the default offering is a 9 am - 5 pm day", () => {
     // The availability response is `no-store`, so every request pays for the
     // whole grid; 60 days x 16 windows was ~960 slot entries per request.
     expect(DEFAULT_TOUR_HORIZON_DAYS).toBe(21);
+  });
+});
+
+describe("resolveTourOfferingSlots", () => {
+  it("fills the 9-5 default on days with no published windows", () => {
+    const now = Date.parse("2026-08-04T15:00:00.000Z");
+    const offered = resolveTourOfferingSlots(["2026-08-06:20"], now, 3);
+    const byDay = new Map<string, string[]>();
+    for (const slot of offered) {
+      const day = slot.split(":")[0] ?? "";
+      const list = byDay.get(day) ?? [];
+      list.push(slot);
+      byDay.set(day, list);
+    }
+    expect(byDay.get("2026-08-06")).toEqual(["2026-08-06:20"]);
+    expect(byDay.get("2026-08-04")?.length).toBe(16);
+    expect(byDay.get("2026-08-05")?.length).toBe(16);
+  });
+
+  it("does not add default windows on a day that already has a published slot", () => {
+    const now = Date.parse("2026-08-04T15:00:00.000Z");
+    const offered = resolveTourOfferingSlots(["2026-08-06:20"], now, 3);
+    expect(offered.filter((slot) => slot.startsWith("2026-08-06:"))).toEqual(["2026-08-06:20"]);
+    expect(offered.some((slot) => slot.startsWith("2026-08-04:"))).toBe(true);
   });
 });
 

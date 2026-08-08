@@ -1,6 +1,7 @@
 import "server-only";
 
 import { filterAdminUserIds } from "@/lib/auth/admin-role";
+import { resolveTourOfferingSlots } from "@/lib/tour-slot-math";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 function text(value: unknown): string {
@@ -66,13 +67,14 @@ export async function managerHasPublishedSlot(
     .eq("manager_user_id", managerUserId)
     .in("record_type", ["manager_property_availability", "manager_availability"]);
 
+  const published: string[] = [];
   for (const row of rows ?? []) {
     if (propertyId && row.record_type === "manager_property_availability" && text(row.property_id) !== propertyId) {
       continue;
     }
-    if (payloadSlots(row.row_data).includes(slotKey)) return true;
+    published.push(...payloadSlots(row.row_data));
   }
-  return false;
+  return resolveTourOfferingSlots(published).includes(slotKey);
 }
 
 /** True when an admin-role account publishes the slot in admin availability. */
